@@ -3,7 +3,7 @@
 **Paneles solares para la comunidad, pagados por la energía que realmente generan.**
 Un contrato inteligente en **Stellar (Soroban)** hecho para el reto de la semana 2 del *Pura Vida Bootcamp* (Oppia Climb).
 
-🔗 **Simulador interactivo:** [`docs/index.html`](docs/index.html) (publicado en GitHub Pages)
+🔗 **Simulador interactivo:** https://relichtyy.github.io/sol-comunitario/
 
 ---
 
