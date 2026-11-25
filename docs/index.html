@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sol Comunitario</title>
+<meta name="description" content="Simulador del contrato Soroban Sol Comunitario: paneles solares comunitarios con pago por energía generada.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fbf7ee; --card:#fffdf7; --ink:#1d1a14; --muted:#6b6455; --line:#e6dcc6;
+  --sun:#f4a51c; --sun-soft:#fde7b8; --leaf:#2f7d4f; --leaf-soft:#d6eedd; --sky:#2b59c3; --warn:#c2462e;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#14130f; --card:#1d1b16; --ink:#f3ecdc; --muted:#a79f8c; --line:#353126;
+    --sun:#f7b53b; --sun-soft:#3f3218; --leaf:#5cc086; --leaf-soft:#1c3526; --sky:#7d9cf0; --warn:#ec7a5f; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Space Grotesk",system-ui,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:40px 16px 80px}
+header{display:grid;gap:12px;margin-bottom:32px}
+.kicker{font:600 12px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--sun)}
+h1{font-size:clamp(36px,6vw,64px);line-height:1;margin:0;letter-spacing:-.02em}
+h1 span{color:var(--sun)}
+.lede{max-width:640px;color:var(--muted);font-size:18px;margin:0}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+h2{font-size:14px;font-family:"JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 16px}
+label{display:grid;gap:6px;margin-bottom:16px;font-size:14px}
+.row{display:flex;justify-content:space-between;gap:8px}
+.row b{font-family:"JetBrains Mono",monospace}
+input[type=range]{width:100%;accent-color:var(--sun)}
+.neighbors{display:grid;gap:8px}
+.nb{display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;font-size:14px}
+.nb input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:14px "JetBrains Mono",monospace}
+.meter{display:flex;align-items:flex-end;gap:6px;height:140px;margin:8px 0 4px;border-bottom:1px dashed var(--line);position:relative}
+.bar{flex:1;background:var(--sun);border-radius:6px 6px 0 0;transition:height .3s}
+.goal{position:absolute;left:0;right:0;border-top:2px dashed var(--leaf)}
+.goal span{position:absolute;right:0;top:-20px;font:12px "JetBrains Mono",monospace;color:var(--leaf)}
+.months{display:flex;gap:6px;font:12px "JetBrains Mono",monospace;color:var(--muted)}
+.months span{flex:1;text-align:center}
+.split{display:flex;height:44px;border-radius:10px;overflow:hidden;margin:16px 0 8px;border:1px solid var(--line)}
+.split div{display:flex;align-items:center;justify-content:center;font:600 13px "JetBrains Mono",monospace;color:#1d1a14;transition:flex-grow .3s;min-width:0;overflow:hidden;white-space:nowrap}
+.adv{background:var(--sun-soft);color:var(--ink)!important}.fin{background:var(--sun)}.ref{background:var(--leaf-soft);color:var(--ink)!important}
+.legend{display:grid;gap:6px;font-size:14px}
+.legend div{display:flex;justify-content:space-between}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+td,th{padding:6px 0;border-bottom:1px solid var(--line);text-align:left}
+td:last-child,th:last-child{text-align:right;font-family:"JetBrains Mono",monospace}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:20px}
+@media (max-width:820px){.steps{grid-template-columns:1fr 1fr}}
+.step{border-left:3px solid var(--sun);padding:4px 0 4px 12px;font-size:14px}
+.step b{display:block;font-size:15px}
+.committee{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.sig{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font:13px "JetBrains Mono",monospace;cursor:pointer;background:var(--bg);color:var(--ink)}
+.sig[aria-pressed=true]{background:var(--leaf);border-color:var(--leaf);color:#fff}
+.status{font:600 13px "JetBrains Mono",monospace;margin-top:10px}
+.ok{color:var(--leaf)}.no{color:var(--warn)}
+code{font-family:"JetBrains Mono",monospace;font-size:13px;background:var(--sun-soft);padding:1px 5px;border-radius:4px}
+footer{margin-top:40px;color:var(--muted);font-size:14px}
+a{color:var(--sky)}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Soroban · Stellar · Costa Rica</div>
+    <h1>Sol <span>Comunitario</span></h1>
+    <p class="lede">Los vecinos juntan plata para paneles solares en el salón comunal. El instalador cobra según la energía que los paneles <em>realmente</em> generan. Lo que no se ganó vuelve a cada vecino.</p>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="t-param">
+      <h2 id="t-param">1 · El acuerdo</h2>
+      <label>kWh prometidos en 90 días <div class="row"><input id="promised" type="range" min="300" max="3000" step="50" value="1000"><b id="promisedV"></b></div></label>
+      <label>Adelanto al instalar <div class="row"><input id="advance" type="range" min="0" max="50" step="5" value="30"><b id="advanceV"></b></div></label>
+      <h2 style="margin-top:8px">2 · Aportes de vecinos (₡ / USDC)</h2>
+      <div class="neighbors" id="neighbors"></div>
+      <h2 style="margin-top:20px">3 · Comité 2 de 3 confirma instalación</h2>
+      <div class="committee" id="committee"></div>
+      <div class="status" id="instStatus" aria-live="polite"></div>
+    </section>
+
+    <section class="card" aria-labelledby="t-meter">
+      <h2 id="t-meter">4 · Lecturas del medidor (generación mensual)</h2>
+      <div class="meter" id="meter"><div class="goal" id="goal"><span>meta</span></div></div>
+      <div class="months"><span>Mes 1</span><span>Mes 2</span><span>Mes 3</span></div>
+      <label style="margin-top:14px">Rendimiento real de los paneles <div class="row"><input id="perf" type="range" min="0" max="130" step="5" value="80"><b id="perfV"></b></div></label>
+
+      <h2 style="margin-top:8px">5 · Liquidación (<code>settle</code>)</h2>
+      <div class="split" id="split" role="img" aria-label="Reparto del fondo">
+        <div class="adv" id="sAdv"></div><div class="fin" id="sFin"></div><div class="ref" id="sRef"></div>
+      </div>
+      <div class="legend">
+        <div><span><i class="dot" style="background:var(--sun-soft)"></i>Adelanto al instalar</span><b id="lAdv"></b></div>
+        <div><span><i class="dot" style="background:var(--sun)"></i>Pago final al instalador</span><b id="lFin"></b></div>
+        <div><span><i class="dot" style="background:var(--leaf-soft)"></i>Vuelve a los vecinos</span><b id="lRef"></b></div>
+      </div>
+      <table><thead><tr><th>Vecino</th><th>Reembolso</th></tr></thead><tbody id="refunds"></tbody></table>
+    </section>
+  </div>
+
+  <div class="steps">
+    <div class="step"><b>Aportan</b>La plata queda bloqueada en el contrato, no en una cuenta personal.</div>
+    <div class="step"><b>Se instala</b>2 de 3 del comité firman → adelanto para comprar equipo.</div>
+    <div class="step"><b>Se mide</b>Lecturas absolutas firmadas por mayoría. El medidor nunca retrocede.</div>
+    <div class="step"><b>Se liquida</b>Pago proporcional a la energía. Sin instalación a tiempo: 100% de vuelta.</div>
+  </div>
+
+  <footer>Simulador que replica las fórmulas del contrato <code>contracts/sol-comunitario/src/lib.rs</code>. Reto individual · Pura Vida Bootcamp · Oppia Climb.</footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const neighbors = [["Doña Ana",7500],["Beto (pulpería)",2500],["Escuela",0]];
+const members = ["Comité 1","Comité 2","Comité 3"];
+const signed = new Set();
+const fmt = n => Math.floor(n).toLocaleString("es-CR");
+
+$("neighbors").innerHTML = neighbors.map((n,i)=>
+  `<div class="nb"><span>${n[0]}</span><input type="number" min="0" step="100" value="${n[1]}" data-i="${i}" aria-label="Aporte de ${n[0]}"></div>`).join("");
+$("committee").innerHTML = members.map((m,i)=>
+  `<button class="sig" aria-pressed="false" data-i="${i}">✍ ${m}</button>`).join("");
+
+document.querySelectorAll(".nb input").forEach(el=>el.addEventListener("input",e=>{
+  neighbors[e.target.dataset.i][1] = Math.max(0, +e.target.value || 0); render();
+}));
+document.querySelectorAll(".sig").forEach(el=>el.addEventListener("click",e=>{
+  const i = e.currentTarget.dataset.i;
+  signed.has(i) ? signed.delete(i) : signed.add(i);
+  e.currentTarget.setAttribute("aria-pressed", signed.has(i)); render();
+}));
+["promised","advance","perf"].forEach(id=>$(id).addEventListener("input",render));
+
+function render(){
+  const promised = +$("promised").value, advBps = +$("advance").value * 100, perf = +$("perf").value;
+  $("promisedV").textContent = fmt(promised)+" kWh";
+  $("advanceV").textContent = advBps/100+"%";
+  const total = neighbors.reduce((a,n)=>a+n[1],0);
+  const installed = signed.size >= 2 && total > 0;
+  $("instStatus").innerHTML = installed
+    ? `<span class="ok">✓ ${signed.size}/3 firmas · instalación confirmada</span>`
+    : `<span class="no">${signed.size}/3 firmas · ${total===0?"sin fondos":"falta mayoría"} — si vence el plazo, todos recuperan el 100%</span>`;
+
+  const generated = installed ? Math.round(promised * perf / 100) : 0;
+  $("perfV").textContent = installed ? `${perf}% · ${fmt(generated)} kWh` : "sin instalar";
+  const monthly = [0.3,0.37,0.33].map(f=>generated*f);
+  const maxH = Math.max(promised, generated) / 3 * 1.4;
+  $("meter").querySelectorAll(".bar").forEach(b=>b.remove());
+  monthly.forEach(m=>{const b=document.createElement("div");b.className="bar";b.style.height=(m/maxH*100)+"%";$("meter").appendChild(b);});
+  $("goal").style.bottom = (promised/3/maxH*100)+"%";
+
+  // === Mismas fórmulas que el contrato ===
+  const advance = installed ? Math.floor(total * advBps / 10000) : 0;
+  const delivered = Math.min(generated, promised);
+  const earned = installed ? Math.floor(total * delivered / promised) : 0;
+  const fin = Math.max(earned - advance, 0);
+  const paid = advance + fin, rest = total - paid;
+
+  const pct = v => total ? v/total*100 : 0;
+  [["sAdv",advance],["sFin",fin],["sRef",rest]].forEach(([id,v])=>{
+    $(id).style.flexGrow = pct(v); $(id).textContent = pct(v) >= 12 ? Math.round(pct(v))+"%" : "";
+  });
+  $("lAdv").textContent = "₡"+fmt(advance); $("lFin").textContent = "₡"+fmt(fin); $("lRef").textContent = "₡"+fmt(rest);
+  $("refunds").innerHTML = neighbors.filter(n=>n[1]>0).map(n=>
+    `<tr><td>${n[0]} aportó ₡${fmt(n[1])}</td><td>₡${fmt(total ? n[1]*rest/total : 0)}</td></tr>`).join("");
+}
+render();
+</script>
+</body>
+</html>
