@@ -100,7 +100,7 @@ fn camino_feliz_80_por_ciento_de_la_energia() {
     assert_eq!(s.client.get_project(&id).kwh_generated, 800);
     assert_eq!(s.client.performance_bps(&id), 8_000);
 
-    advance_days(&s.env, 1);
+    advance_days(&s.env, 1 + OBJECTION_DAYS);
     // Ganó 80% = 8 000; ya recibió 3 000 => paga 5 000.
     assert_eq!(s.client.settle(&id), 5_000);
     assert_eq!(s.token.balance(&s.installer), 8_000);
@@ -209,7 +209,7 @@ fn sobre_generar_no_paga_mas_del_100() {
     s.client.contribute(&s.ana, &id, &10_000);
     install(&s, id, 0);
     read(&s, id, 1_500);
-    advance_days(&s.env, 91);
+    advance_days(&s.env, 91 + OBJECTION_DAYS);
     assert_eq!(s.client.settle(&id), 7_000);
     assert_eq!(s.token.balance(&s.installer), 10_000);
     assert_eq!(s.client.performance_bps(&id), 10_000);
@@ -223,7 +223,7 @@ fn paneles_que_no_generan_instalador_solo_se_queda_el_adelanto() {
     s.client.contribute(&s.ana, &id, &10_000);
     install(&s, id, 0);
     read(&s, id, 100); // 10% < 30% de adelanto
-    advance_days(&s.env, 91);
+    advance_days(&s.env, 91 + OBJECTION_DAYS);
     assert_eq!(s.client.settle(&id), 0);
     assert_eq!(s.token.balance(&s.installer), 3_000);
     assert_eq!(s.client.claim_refund(&s.ana, &id), 7_000);
@@ -282,7 +282,7 @@ fn no_doble_liquidacion_ni_doble_reembolso() {
     s.client.contribute(&s.ana, &id, &1_000);
     install(&s, id, 0);
     read(&s, id, 500);
-    advance_days(&s.env, 91);
+    advance_days(&s.env, 91 + OBJECTION_DAYS);
     s.client.settle(&id);
 
     assert_eq!(s.client.try_settle(&id), Err(Ok(Error::NotMeasuring)));
@@ -400,10 +400,108 @@ fn redondeo_nunca_deja_al_contrato_en_negativo() {
     s.client.contribute(&s.beto, &id, &333);
     install(&s, id, 0);
     read(&s, id, 3);
-    advance_days(&s.env, 91);
+    advance_days(&s.env, 91 + OBJECTION_DAYS);
     s.client.settle(&id);
     s.client.claim_refund(&s.ana, &id);
     s.client.claim_refund(&s.beto, &id);
     let left = s.token.balance(&s.client.address);
     assert!((0..=2).contains(&left));
+}
+
+// ---------------- período de objeción ----------------
+
+/// Lectura inflada: el comité (c1 + c2) firma 1 000 kWh aunque el medidor
+/// realmente marcaba 600.
+fn inflated_project(s: &Setup) -> u32 {
+    let id = new_project(s);
+    s.client.contribute(&s.ana, &id, &10_000);
+    install(s, id, 0);
+    read(s, id, 1_000);
+    id
+}
+
+#[test]
+fn no_se_liquida_durante_la_objecion() {
+    let s = setup();
+    let id = inflated_project(&s);
+    advance_days(&s.env, 91);
+    assert_eq!(
+        s.client.try_settle(&id),
+        Err(Ok(Error::InObjectionPeriod))
+    );
+    advance_days(&s.env, OBJECTION_DAYS);
+    assert_eq!(s.client.settle(&id), 7_000);
+}
+
+#[test]
+fn vecino_objeta_y_el_comite_corrige_la_lectura() {
+    let s = setup();
+    let id = inflated_project(&s);
+    advance_days(&s.env, 91);
+
+    s.client.dispute(&s.ana, &id);
+    assert_eq!(s.client.get_project(&id).status, Status::Disputed);
+
+    // Aunque pase el plazo, un proyecto en disputa no se liquida solo.
+    advance_days(&s.env, 30);
+    assert_eq!(s.client.try_settle(&id), Err(Ok(Error::InDispute)));
+
+    // Mayoría del comité fija la lectura real (600) y se liquida en el acto.
+    assert!(!s.client.resolve_dispute(&s.c1, &id, &600));
+    assert!(s.client.resolve_dispute(&s.c3, &id, &600));
+
+    let p = s.client.get_project(&id);
+    assert_eq!(p.status, Status::Settled);
+    assert_eq!(p.kwh_generated, 600);
+    // 60% de 10 000 = 6 000 (3 000 adelanto + 3 000 final)
+    assert_eq!(s.token.balance(&s.installer), 6_000);
+    assert_eq!(s.client.claim_refund(&s.ana, &id), 4_000);
+}
+
+#[test]
+fn solo_quien_aporto_puede_objetar() {
+    let s = setup();
+    let id = inflated_project(&s);
+    advance_days(&s.env, 91);
+    assert_eq!(
+        s.client.try_dispute(&s.beto, &id),
+        Err(Ok(Error::NotContributor))
+    );
+}
+
+#[test]
+fn objecion_solo_dentro_del_plazo() {
+    let s = setup();
+    let id = inflated_project(&s);
+    // Todavía midiendo.
+    assert_eq!(
+        s.client.try_dispute(&s.ana, &id),
+        Err(Ok(Error::NotDisputable))
+    );
+    // Ya pasó la ventana de objeción.
+    advance_days(&s.env, 91 + OBJECTION_DAYS);
+    assert_eq!(
+        s.client.try_dispute(&s.ana, &id),
+        Err(Ok(Error::NotDisputable))
+    );
+}
+
+#[test]
+fn resolver_requiere_disputa_abierta_y_comite() {
+    let s = setup();
+    let id = inflated_project(&s);
+    advance_days(&s.env, 91);
+    assert_eq!(
+        s.client.try_resolve_dispute(&s.c1, &id, &600),
+        Err(Ok(Error::NotDisputed))
+    );
+    s.client.dispute(&s.ana, &id);
+    assert_eq!(
+        s.client.try_resolve_dispute(&s.ana, &id, &600),
+        Err(Ok(Error::NotCommitteeMember))
+    );
+    assert_eq!(
+        s.client.try_resolve_dispute(&s.c1, &id, &-1),
+        Err(Ok(Error::InvalidAmount))
+    );
 }

@@ -4,170 +4,825 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sol Comunitario</title>
-<meta name="description" content="Simulador del contrato Soroban Sol Comunitario: paneles solares comunitarios con pago por energía generada.">
+<meta name="description" content="Simulador guiado del contrato Soroban Sol Comunitario: la comunidad paga paneles solares solo por la energía que generan.">
+<script type="module" src="https://ui-sdk.dev/web@0.js"></script>
+<link rel="stylesheet" href="https://ui-sdk.dev/web@0.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
+@layer ui-sdk;
 :root{
-  --bg:#fbf7ee; --card:#fffdf7; --ink:#1d1a14; --muted:#6b6455; --line:#e6dcc6;
-  --sun:#f4a51c; --sun-soft:#fde7b8; --leaf:#2f7d4f; --leaf-soft:#d6eedd; --sky:#2b59c3; --warn:#c2462e;
+  --bg:#f8f4ea; --paper:#fffdf8; --ink:#1c1912; --muted:#6a6252; --line:#e7ddc8;
+  --sun:#e8960c; --sun-2:#f6b73c; --sun-soft:#fdecc6; --leaf:#2c7a4b; --leaf-soft:#dcefe2;
+  --sky:#2f5fc4; --sky-soft:#e2e9fb; --bad:#b9412b; --bad-soft:#f8e1da;
+  --r:16px; --shadow:0 1px 0 rgba(28,25,18,.04),0 8px 24px -12px rgba(28,25,18,.18);
 }
 @media (prefers-color-scheme: dark){
-  :root{ --bg:#14130f; --card:#1d1b16; --ink:#f3ecdc; --muted:#a79f8c; --line:#353126;
-    --sun:#f7b53b; --sun-soft:#3f3218; --leaf:#5cc086; --leaf-soft:#1c3526; --sky:#7d9cf0; --warn:#ec7a5f; }
+  :root{ --bg:#12110d; --paper:#1b1914; --ink:#f2ead8; --muted:#a69d89; --line:#332f25;
+    --sun:#f4a82a; --sun-2:#f8c35a; --sun-soft:#3a2e15; --leaf:#5cc086; --leaf-soft:#18301f;
+    --sky:#86a5f2; --sky-soft:#1b2440; --bad:#ef8064; --bad-soft:#3a1d16;
+    --shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.6); }
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Space Grotesk",system-ui,sans-serif}
-main{max-width:1040px;margin:0 auto;padding:40px 16px 80px}
-header{display:grid;gap:12px;margin-bottom:32px}
-.kicker{font:600 12px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--sun)}
-h1{font-size:clamp(36px,6vw,64px);line-height:1;margin:0;letter-spacing:-.02em}
-h1 span{color:var(--sun)}
-.lede{max-width:640px;color:var(--muted);font-size:18px;margin:0}
-.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px}
-@media (max-width:820px){.grid{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
-h2{font-size:14px;font-family:"JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 16px}
-label{display:grid;gap:6px;margin-bottom:16px;font-size:14px}
-.row{display:flex;justify-content:space-between;gap:8px}
-.row b{font-family:"JetBrains Mono",monospace}
-input[type=range]{width:100%;accent-color:var(--sun)}
-.neighbors{display:grid;gap:8px}
-.nb{display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;font-size:14px}
-.nb input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:14px "JetBrains Mono",monospace}
-.meter{display:flex;align-items:flex-end;gap:6px;height:140px;margin:8px 0 4px;border-bottom:1px dashed var(--line);position:relative}
-.bar{flex:1;background:var(--sun);border-radius:6px 6px 0 0;transition:height .3s}
-.goal{position:absolute;left:0;right:0;border-top:2px dashed var(--leaf)}
-.goal span{position:absolute;right:0;top:-20px;font:12px "JetBrains Mono",monospace;color:var(--leaf)}
-.months{display:flex;gap:6px;font:12px "JetBrains Mono",monospace;color:var(--muted)}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Space Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+h1,h2,h3{margin:0;letter-spacing:-.02em}
+button{font:inherit;color:inherit}
+.btn{display:inline-flex;align-items:center;gap:8px;min-height:40px;line-height:1.3;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:9px 16px;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;color:var(--ink);transition:transform .15s,background .2s,border-color .2s,opacity .2s}
+.btn:hover:not(:disabled){transform:translateY(-1px);border-color:var(--sun)}
+.btn:active:not(:disabled){transform:translateY(0)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.sun{background:var(--sun);border-color:var(--sun);color:#1c1912}
+.btn.ghost{background:transparent}
+.btn.bad{border-color:var(--bad);color:var(--bad);background:transparent}
+:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+
+.hero{padding:56px 0 40px;display:grid;grid-template-columns:1.25fr .9fr;gap:40px;align-items:center}
+@media (max-width:860px){.hero{grid-template-columns:1fr;padding-top:36px}}
+.kicker{font:600 12px "JetBrains Mono",monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--sun)}
+.hero h1{font-size:clamp(40px,7vw,76px);line-height:.98;margin:14px 0 18px}
+.hero h1 em{font-style:normal;color:var(--sun)}
+.hero p{font-size:19px;color:var(--muted);max-width:560px;margin:0 0 24px}
+.goal{display:flex;gap:14px;align-items:flex-start;background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);max-width:560px}
+.goal b{display:block}
+.goal .ico{flex:none;width:36px;height:36px;border-radius:10px;background:var(--sun-soft);display:grid;place-items:center;font-size:18px}
+.sun-art{position:relative;aspect-ratio:1;max-width:380px;width:100%;justify-self:center}
+.sun-art .rays{position:absolute;inset:0;animation:spin 60s linear infinite}
+.sun-art .core{position:absolute;inset:27%;border-radius:50%;background:radial-gradient(circle at 35% 35%,var(--sun-2),var(--sun));box-shadow:0 0 80px 10px color-mix(in srgb,var(--sun) 35%,transparent);animation:pulse 5s ease-in-out infinite}
+.sun-art .panel{position:absolute;left:8%;right:8%;bottom:4%;height:24%;display:grid;grid-template-columns:repeat(6,1fr);gap:4px;transform:perspective(500px) rotateX(38deg)}
+.sun-art .panel i{background:linear-gradient(160deg,#3d5fb8,#1d3170);border-radius:3px;position:relative;overflow:hidden}
+.sun-art .panel i::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-120%);animation:shine 4s ease-in-out infinite;animation-delay:calc(var(--d) * .12s)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{50%{transform:scale(1.04)}}
+@keyframes shine{0%,60%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+
+section.block{padding:40px 0}
+.sec-head{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.sec-head h2{font-size:clamp(26px,3.6vw,38px)}
+.sec-head p{margin:6px 0 0;color:var(--muted);max-width:620px}
+.problem{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:860px){.problem{grid-template-columns:1fr}}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--shadow)}
+.problem .card .n{font:700 13px "JetBrains Mono",monospace;color:var(--sun)}
+.problem .card h3{font-size:19px;margin:6px 0}
+.problem .card p{margin:0;color:var(--muted);font-size:15px}
+.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin-top:18px}
+@media (max-width:860px){.flow{grid-template-columns:repeat(2,1fr);gap:16px 12px}}
+.flow .st{padding:14px 12px 0;border-top:3px solid var(--line);position:relative;font-size:14px}
+.flow .st::before{content:"";position:absolute;top:-8px;left:12px;width:13px;height:13px;border-radius:50%;background:var(--paper);border:3px solid var(--sun)}
+.flow .st b{display:block;font-size:15px}
+.flow .st span{color:var(--muted)}
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+
+.sim{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);gap:18px;align-items:start}
+@media (max-width:960px){.sim{grid-template-columns:1fr}}
+.scen{display:flex;gap:8px;flex-wrap:wrap}
+.scen .btn{font-size:13px;padding:7px 12px}
+.scen .btn[aria-pressed=true]{background:var(--sun-soft);border-color:var(--sun)}
+
+ui-tabs{display:block}
+ui-tabs-list{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:4px;background:var(--bg);border:1px solid var(--line);border-radius:14px}
+ui-tabs-tab{display:block;min-width:0}
+ui-tabs-tab button{width:100%;border:0;background:transparent;padding:8px 4px;border-radius:10px;font:600 12px "Space Grotesk",sans-serif;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;gap:4px;align-items:center;transition:color .2s,background .2s;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:560px){ui-tabs-tab button{font-size:0;gap:0}}
+ui-tabs-tab button .k{font:600 11px "JetBrains Mono",monospace;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--line);color:var(--muted);transition:background .3s,color .3s}
+ui-tabs-tab[data-selected] button{background:var(--paper);color:var(--ink);box-shadow:var(--shadow)}
+ui-tabs-tab[data-selected] button .k{background:var(--sun);color:#1c1912}
+ui-tabs-tab.done button .k{background:var(--leaf);color:#fff}
+ui-tabs-tab[data-disabled] button,ui-tabs-tab[disabled] button{opacity:.45;cursor:not-allowed}
+ui-tabs-panel{display:block;padding:22px 4px 4px}
+ui-tabs-panel[hidden]{display:none}
+ui-tabs-panel[data-selected]{animation:panelIn .35s ease}
+@keyframes panelIn{from{opacity:0;transform:translateY(6px)}}
+.panel-title{font-size:22px;margin-bottom:4px}
+.panel-sub{color:var(--muted);margin:0 0 18px;font-size:15px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+
+.field{margin-bottom:18px}
+.field .row{display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px}
+.field .row b{font-family:"JetBrains Mono",monospace}
+ui-slider{display:block}
+
+.people{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:560px){.people{grid-template-columns:1fr}}
+.person{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--bg);display:grid;gap:8px;transition:border-color .3s,background .3s}
+.person.on{border-color:var(--leaf);background:var(--leaf-soft)}
+.person .av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--sun-soft);color:var(--ink)}
+.person .nm{font-weight:600;line-height:1.2}
+.person .rl{font-size:13px;color:var(--muted)}
+.person .amt{font:600 14px "JetBrains Mono",monospace}
+.person .btn{justify-content:center}
+.sigs{display:flex;gap:6px;align-items:center;font:600 13px "JetBrains Mono",monospace;margin-top:14px}
+.sigs i{width:30px;height:8px;border-radius:4px;background:var(--line);transition:background .4s}
+.sigs i.on{background:var(--leaf)}
+
+.meterbox{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center}
+@media (max-width:560px){.meterbox{grid-template-columns:1fr}}
+.meter{background:#16150f;color:#9ef0b5;border-radius:14px;padding:14px 18px;font:600 34px "JetBrains Mono",monospace;letter-spacing:.06em;min-width:220px;box-shadow:inset 0 0 0 1px #2c2a20}
+.meter small{display:block;font:500 11px "JetBrains Mono",monospace;color:#8b8672;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.bars{display:flex;align-items:flex-end;gap:8px;height:130px;position:relative;border-bottom:1px dashed var(--line)}
+.bars .b{flex:1;border-radius:8px 8px 0 0;background:var(--sun);height:0;transition:height .9s cubic-bezier(.2,.8,.2,1);position:relative}
+.bars .b.inf{background:repeating-linear-gradient(45deg,var(--bad),var(--bad) 6px,var(--sun) 6px,var(--sun) 12px)}
+.bars .b span{position:absolute;top:-20px;left:0;right:0;text-align:center;font:600 11px "JetBrains Mono",monospace;color:var(--muted)}
+.bars .target{position:absolute;left:0;right:0;border-top:2px dashed var(--leaf);transition:bottom .4s}
+.bars .target span{position:absolute;right:0;top:-18px;font:600 11px "JetBrains Mono",monospace;color:var(--leaf)}
+.months{display:flex;gap:8px;font:12px "JetBrains Mono",monospace;color:var(--muted);margin-top:6px}
 .months span{flex:1;text-align:center}
-.split{display:flex;height:44px;border-radius:10px;overflow:hidden;margin:16px 0 8px;border:1px solid var(--line)}
-.split div{display:flex;align-items:center;justify-content:center;font:600 13px "JetBrains Mono",monospace;color:#1d1a14;transition:flex-grow .3s;min-width:0;overflow:hidden;white-space:nowrap}
-.adv{background:var(--sun-soft);color:var(--ink)!important}.fin{background:var(--sun)}.ref{background:var(--leaf-soft);color:var(--ink)!important}
+.switchrow{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border:1px dashed var(--bad);border-radius:12px;margin-top:16px;font-size:14px}
+.switchrow b{color:var(--bad)}
+
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+.compare .card{padding:14px;box-shadow:none}
+.compare .v{font:700 26px "JetBrains Mono",monospace}
+.compare .lbl{font-size:13px;color:var(--muted)}
+.compare .bad .v{color:var(--bad)}
+
+.split{display:flex;height:54px;border-radius:12px;overflow:hidden;border:1px solid var(--line);margin:4px 0 12px;background:var(--bg)}
+.split div{flex-grow:0;flex-basis:0;display:flex;align-items:center;justify-content:center;font:600 13px "JetBrains Mono",monospace;transition:flex-grow .9s cubic-bezier(.2,.8,.2,1);white-space:nowrap;overflow:hidden;min-width:0}
+.s-adv{background:var(--sun-soft)} .s-fin{background:var(--sun);color:#1c1912} .s-ref{background:var(--leaf-soft)}
 .legend{display:grid;gap:6px;font-size:14px}
-.legend div{display:flex;justify-content:space-between}
-.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px}
-table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
-td,th{padding:6px 0;border-bottom:1px solid var(--line);text-align:left}
-td:last-child,th:last-child{text-align:right;font-family:"JetBrains Mono",monospace}
-.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:20px}
-@media (max-width:820px){.steps{grid-template-columns:1fr 1fr}}
-.step{border-left:3px solid var(--sun);padding:4px 0 4px 12px;font-size:14px}
-.step b{display:block;font-size:15px}
-.committee{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.sig{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font:13px "JetBrains Mono",monospace;cursor:pointer;background:var(--bg);color:var(--ink)}
-.sig[aria-pressed=true]{background:var(--leaf);border-color:var(--leaf);color:#fff}
-.status{font:600 13px "JetBrains Mono",monospace;margin-top:10px}
-.ok{color:var(--leaf)}.no{color:var(--warn)}
-code{font-family:"JetBrains Mono",monospace;font-size:13px;background:var(--sun-soft);padding:1px 5px;border-radius:4px}
-footer{margin-top:40px;color:var(--muted);font-size:14px}
-a{color:var(--sky)}
+.legend div{display:flex;justify-content:space-between;gap:10px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:middle}
+.verdict{margin-top:16px;padding:16px;border-radius:14px;background:var(--leaf-soft);border:1px solid color-mix(in srgb,var(--leaf) 40%,transparent);display:none}
+.verdict.show{display:block;animation:panelIn .5s ease}
+
+.contract{position:sticky;top:16px;display:grid;gap:12px}
+.vault{background:var(--ink);color:var(--bg);border-radius:var(--r);padding:20px}
+.vault .lbl{font:600 11px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;opacity:.65}
+.vault .big{font:700 34px "JetBrains Mono",monospace;margin:4px 0 12px}
+.vault .row{display:flex;justify-content:space-between;font:13px "JetBrains Mono",monospace;opacity:.85;padding:4px 0;border-top:1px solid color-mix(in srgb,var(--bg) 14%,transparent)}
+.flash{animation:flash .6s ease}
+@keyframes flash{30%{box-shadow:0 0 0 4px var(--sun)}}
+.phases{display:flex;gap:4px;margin-top:14px}
+.phases i{flex:1;height:6px;border-radius:3px;background:color-mix(in srgb,var(--bg) 18%,transparent);transition:background .4s}
+.phases i.on{background:var(--sun)}
+.phases i.bad{background:var(--bad)}
+.status{display:inline-flex;gap:6px;align-items:center;font:600 12px "JetBrains Mono",monospace;padding:4px 10px;border-radius:999px;background:var(--sun);color:#1c1912}
+.status::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.3}}
+.log{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:14px;max-height:340px;overflow:auto;font:12.5px/1.5 "JetBrains Mono",monospace;overflow-wrap:anywhere}
+.log h3{font:600 11px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.log .e{padding:6px 0;border-bottom:1px dashed var(--line);animation:panelIn .3s ease}
+.log .e .fn{color:var(--sky)} .log .e.err .fn{color:var(--bad)}
+.log .e .r{display:block;color:var(--muted)} .log .e.err .r{color:var(--bad)}
+.log .e.ok .r::before{content:"✓ ";color:var(--leaf)}
+.log .e.err .r::before{content:"✗ "}
+.log .empty{color:var(--muted)}
+
+.coin{position:fixed;left:0;top:0;z-index:50;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 35%,var(--sun-2),var(--sun));box-shadow:0 2px 6px rgba(0,0,0,.25);pointer-events:none;display:grid;place-items:center;font:700 11px "JetBrains Mono",monospace;color:#1c1912}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);opacity:0;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-size:14px;z-index:60;transition:all .35s cubic-bezier(.2,.8,.2,1);max-width:calc(100% - 32px);pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--bad);color:#fff}
+
+ui-dialog-backdrop{position:fixed;inset:0;background:rgba(20,18,12,.45);backdrop-filter:blur(3px);z-index:70}
+ui-dialog-content{position:fixed;z-index:71;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100% - 32px));max-height:85vh;overflow:auto;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 30px 80px -20px rgba(0,0,0,.45)}
+ui-dialog-content[hidden],ui-dialog-backdrop[hidden]{display:none}
+ui-dialog-content[data-open]{animation:dlgIn .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes dlgIn{from{opacity:0;transform:translate(-50%,-46%) scale(.97)}}
+ui-dialog-title{display:block;font-size:22px;font-weight:700;margin-bottom:8px}
+ui-dialog-description{display:block;color:var(--muted);margin-bottom:12px}
+pre.formula{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px;overflow:auto;font:13px/1.6 "JetBrains Mono",monospace}
+ui-tooltip-content{background:var(--ink);color:var(--bg);padding:8px 10px;border-radius:8px;font-size:13px;max-width:260px;z-index:80}
+.term{border:0;border-bottom:1px dashed var(--muted);cursor:help;background:none;padding:0;font:inherit;color:var(--ink)}
+
+footer{padding:40px 0 60px;color:var(--muted);font-size:14px;border-top:1px solid var(--line);margin-top:30px}
+footer a{color:var(--sky)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .reveal{opacity:1;transform:none}
+}
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div class="kicker">Soroban · Stellar · Costa Rica</div>
-    <h1>Sol <span>Comunitario</span></h1>
-    <p class="lede">Los vecinos juntan plata para paneles solares en el salón comunal. El instalador cobra según la energía que los paneles <em>realmente</em> generan. Lo que no se ganó vuelve a cada vecino.</p>
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <div class="kicker">Contrato inteligente · Stellar Soroban · Costa Rica</div>
+      <h1>Sol <em>Comunitario</em></h1>
+      <p>Los vecinos juntan plata para poner paneles solares en el salón comunal. Este contrato guarda esa plata y le paga al instalador <b>solo por la energía que los paneles realmente generan</b>.</p>
+      <div class="goal">
+        <div class="ico" aria-hidden="true">🎯</div>
+        <div><b>El objetivo</b>Que una comunidad pueda invertir junta sin depender de la confianza: nadie guarda la plata, nadie cobra todo por adelantado, y lo que no se ganó vuelve a cada vecino.</div>
+      </div>
+      <div class="actions">
+        <a class="btn primary" href="#simulador">Probar el flujo completo →</a>
+        <ui-dialog>
+          <ui-dialog-trigger><button class="btn ghost" type="button">¿Qué es un escrow?</button></ui-dialog-trigger>
+          <ui-dialog-backdrop hidden></ui-dialog-backdrop>
+          <ui-dialog-content hidden>
+            <ui-dialog-title>Escrow = una caja fuerte con reglas</ui-dialog-title>
+            <ui-dialog-description>Un tercero neutral que guarda la plata hasta que se cumplan condiciones.</ui-dialog-description>
+            <p>Aquí el "tercero" no es una persona ni un banco: es un <b>contrato inteligente</b> en la red Stellar. Su código es público, nadie lo puede cambiar, y solo mueve la plata cuando se cumplen sus reglas:</p>
+            <ul>
+              <li>Adelanto al instalador solo con <b>2 de 3 firmas</b> del comité.</li>
+              <li>Pago final <b>proporcional a los kWh</b> medidos.</li>
+              <li><b>7 días de objeción</b> antes de pagar.</li>
+              <li>Si nunca se instala, <b>100% de vuelta</b> a cada vecino.</li>
+            </ul>
+            <div class="actions"><ui-dialog-close><button class="btn primary" type="button">Entendido</button></ui-dialog-close></div>
+          </ui-dialog-content>
+        </ui-dialog>
+      </div>
+    </div>
+    <div class="sun-art" aria-hidden="true">
+      <svg class="rays" viewBox="0 0 200 200"><g stroke="var(--sun)" stroke-width="3" stroke-linecap="round" opacity=".55" id="rays"></g></svg>
+      <div class="core"></div>
+      <div class="panel" id="panelArt"></div>
+    </div>
   </header>
 
-  <div class="grid">
-    <section class="card" aria-labelledby="t-param">
-      <h2 id="t-param">1 · El acuerdo</h2>
-      <label>kWh prometidos en 90 días <div class="row"><input id="promised" type="range" min="300" max="3000" step="50" value="1000"><b id="promisedV"></b></div></label>
-      <label>Adelanto al instalar <div class="row"><input id="advance" type="range" min="0" max="50" step="5" value="30"><b id="advanceV"></b></div></label>
-      <h2 style="margin-top:8px">2 · Aportes de vecinos (₡ / USDC)</h2>
-      <div class="neighbors" id="neighbors"></div>
-      <h2 style="margin-top:20px">3 · Comité 2 de 3 confirma instalación</h2>
-      <div class="committee" id="committee"></div>
-      <div class="status" id="instStatus" aria-live="polite"></div>
-    </section>
+  <section class="block reveal" aria-labelledby="h-problem">
+    <div class="sec-head"><div><h2 id="h-problem">El problema, en una frase</h2>
+      <p>En un pueblo de Costa Rica, los vecinos juntan plata para paneles solares, pero no tienen cómo asegurarse de que el instalador cumpla lo que prometió.</p></div></div>
+    <div class="problem">
+      <div class="card"><div class="n">01 · HOY</div><h3>Se paga todo por adelantado</h3><p>Si los paneles rinden la mitad de lo prometido, la plata ya se fue y no hay cómo reclamar.</p></div>
+      <div class="card"><div class="n">02 · HOY</div><h3>Nadie mide en serio</h3><p>No hay un registro compartido de cuánto generan. Es la palabra del instalador contra la de los vecinos.</p></div>
+      <div class="card"><div class="n">03 · HOY</div><h3>¿Quién guarda la plata?</h3><p>El tesorero de la ADI, una cuenta personal, un sobre… todo depende de confiar en una persona.</p></div>
+    </div>
+  </section>
 
-    <section class="card" aria-labelledby="t-meter">
-      <h2 id="t-meter">4 · Lecturas del medidor (generación mensual)</h2>
-      <div class="meter" id="meter"><div class="goal" id="goal"><span>meta</span></div></div>
-      <div class="months"><span>Mes 1</span><span>Mes 2</span><span>Mes 3</span></div>
-      <label style="margin-top:14px">Rendimiento real de los paneles <div class="row"><input id="perf" type="range" min="0" max="130" step="5" value="80"><b id="perfV"></b></div></label>
+  <section class="block reveal" aria-labelledby="h-flow">
+    <div class="sec-head"><div><h2 id="h-flow">Cómo funciona, en 6 pasos</h2>
+      <p>Cada paso es una función del contrato. Abajo podés jugar cada uno.</p></div></div>
+    <div class="flow">
+      <div class="st"><b>1 · Acuerdo</b><span>Instalador + comité fijan kWh prometidos y adelanto.</span></div>
+      <div class="st"><b>2 · Aportes</b><span>Los vecinos depositan. La plata queda en el contrato.</span></div>
+      <div class="st"><b>3 · Instalación</b><span>2 de 3 del comité confirman → adelanto.</span></div>
+      <div class="st"><b>4 · Medición</b><span>3 meses de lecturas del medidor, firmadas 2 de 3.</span></div>
+      <div class="st"><b>5 · Objeción</b><span>7 días para que un vecino objete lecturas infladas.</span></div>
+      <div class="st"><b>6 · Liquidación</b><span>Pago proporcional y reembolsos.</span></div>
+    </div>
+  </section>
 
-      <h2 style="margin-top:8px">5 · Liquidación (<code>settle</code>)</h2>
-      <div class="split" id="split" role="img" aria-label="Reparto del fondo">
-        <div class="adv" id="sAdv"></div><div class="fin" id="sFin"></div><div class="ref" id="sRef"></div>
+  <section class="block" id="simulador" aria-labelledby="h-sim">
+    <div class="sec-head">
+      <div><h2 id="h-sim">Simulador del contrato</h2>
+        <p>Usa las mismas reglas y fórmulas que <span class="mono">lib.rs</span>. A la derecha ves la bóveda del contrato y cada función que se llama.</p></div>
+      <div class="scen" role="group" aria-label="Escenarios">
+        <button class="btn" data-scen="feliz" aria-pressed="true">☀️ Rinde 80%</button>
+        <button class="btn" data-scen="falla" aria-pressed="false">🌧️ Rinde 15%</button>
+        <button class="btn" data-scen="inflado" aria-pressed="false">🕵️ Lecturas infladas</button>
+        <button class="btn" data-scen="nunca" aria-pressed="false">⌛ Nunca se instala</button>
       </div>
-      <div class="legend">
-        <div><span><i class="dot" style="background:var(--sun-soft)"></i>Adelanto al instalar</span><b id="lAdv"></b></div>
-        <div><span><i class="dot" style="background:var(--sun)"></i>Pago final al instalador</span><b id="lFin"></b></div>
-        <div><span><i class="dot" style="background:var(--leaf-soft)"></i>Vuelve a los vecinos</span><b id="lRef"></b></div>
+    </div>
+
+    <div class="sim">
+      <div class="card">
+        <ui-tabs default-value="acuerdo" id="steps">
+          <ui-tabs-list aria-label="Pasos del flujo">
+            <ui-tabs-tab value="acuerdo"><button type="button"><span class="k">1</span>Acuerdo</button></ui-tabs-tab>
+            <ui-tabs-tab value="aportes" disabled><button type="button"><span class="k">2</span>Aportes</button></ui-tabs-tab>
+            <ui-tabs-tab value="instalacion" disabled><button type="button"><span class="k">3</span>Instalación</button></ui-tabs-tab>
+            <ui-tabs-tab value="medicion" disabled><button type="button"><span class="k">4</span>Medición</button></ui-tabs-tab>
+            <ui-tabs-tab value="objecion" disabled><button type="button"><span class="k">5</span>Objeción</button></ui-tabs-tab>
+            <ui-tabs-tab value="liquidacion" disabled><button type="button"><span class="k">6</span>Liquidación</button></ui-tabs-tab>
+          </ui-tabs-list>
+
+          <ui-tabs-panel value="acuerdo">
+            <h3 class="panel-title">El acuerdo</h3>
+            <p class="panel-sub">Solar Tico S.A. (el instalador) y Marta, presidenta del comité, firman las condiciones: cuánta energía promete generar en 90 días y qué
+              <ui-tooltip><ui-tooltip-trigger><button class="term" type="button">adelanto</button></ui-tooltip-trigger><ui-tooltip-content>Parte del fondo que el instalador recibe al confirmar la instalación, para comprar equipo. Máximo 50%.</ui-tooltip-content></ui-tooltip>
+              recibe al instalar.</p>
+            <div class="field">
+              <div class="row"><span>kWh prometidos en 90 días</span><b id="promisedV"></b></div>
+              <ui-slider id="promised" min="600" max="2000" step="50" default-value="1000">
+                <ui-slider-control><ui-slider-track><ui-slider-indicator></ui-slider-indicator><ui-slider-thumb aria-label="kWh prometidos"></ui-slider-thumb></ui-slider-track></ui-slider-control>
+              </ui-slider>
+            </div>
+            <div class="field">
+              <div class="row"><span>Adelanto al instalar</span><b id="advV"></b></div>
+              <ui-slider id="adv" min="0" max="50" step="5" default-value="30">
+                <ui-slider-control><ui-slider-track><ui-slider-indicator></ui-slider-indicator><ui-slider-thumb aria-label="Adelanto en porcentaje"></ui-slider-thumb></ui-slider-track></ui-slider-control>
+              </ui-slider>
+            </div>
+            <div class="actions"><button class="btn primary" id="bCreate">Firmar acuerdo · create_project()</button></div>
+          </ui-tabs-panel>
+
+          <ui-tabs-panel value="aportes">
+            <h3 class="panel-title">Los vecinos aportan</h3>
+            <p class="panel-sub">Cada aporte va directo al contrato (la bóveda oscura). Nadie del pueblo puede tocarlo.</p>
+            <div class="people" id="neighbors"></div>
+            <div class="actions"><button class="btn primary" id="bToInstall" disabled>Continuar a la instalación →</button></div>
+          </ui-tabs-panel>
+
+          <ui-tabs-panel value="instalacion">
+            <h3 class="panel-title">¿Se instalaron los paneles?</h3>
+            <p class="panel-sub">El comité de 3 vecinos revisa los paneles y anota la lectura inicial del medidor. Con <b>2 de 3 firmas</b> el contrato libera el adelanto. Una sola firma no basta: nadie decide solo.</p>
+            <div class="people" id="committee"></div>
+            <div class="sigs" aria-live="polite"><i></i><i></i><span id="sigTxt">0 / 2 firmas</span></div>
+            <div class="actions"><button class="btn bad" id="bExpire">⌛ Dejar vencer los 30 días sin instalar</button></div>
+          </ui-tabs-panel>
+
+          <ui-tabs-panel value="medicion">
+            <h3 class="panel-title">Tres meses midiendo</h3>
+            <p class="panel-sub">Cada mes el comité lee el medidor y firma la
+              <ui-tooltip><ui-tooltip-trigger><button class="term" type="button">lectura absoluta</button></ui-tooltip-trigger><ui-tooltip-content>Se firma lo que marca el medidor (siempre sube), no "cuánto se generó este mes". Así es imposible contar un mes dos veces.</ui-tooltip-content></ui-tooltip>.
+              Se necesitan 2 firmas con el mismo número.</p>
+            <div class="meterbox">
+              <div class="meter" aria-live="polite"><small>Medidor · kWh</small><span id="meterV">5 000</span></div>
+              <div>
+                <div class="bars" id="bars"><div class="b"><span></span></div><div class="b"><span></span></div><div class="b"><span></span></div><div class="target" id="target"><span>meta mensual</span></div></div>
+                <div class="months"><span>Mes 1</span><span>Mes 2</span><span>Mes 3</span></div>
+              </div>
+            </div>
+            <div class="field" style="margin-top:18px">
+              <div class="row"><span>Rendimiento real de los paneles</span><b id="perfV"></b></div>
+              <ui-slider id="perf" min="0" max="130" step="5" default-value="80">
+                <ui-slider-control><ui-slider-track><ui-slider-indicator></ui-slider-indicator><ui-slider-thumb aria-label="Rendimiento real"></ui-slider-thumb></ui-slider-track></ui-slider-control>
+              </ui-slider>
+            </div>
+            <label class="switchrow"><span><b>Modo tramposo:</b> dos del comité se ponen de acuerdo con el instalador e inflan las lecturas un 25%</span>
+              <ui-switch id="cheat" aria-label="Inflar lecturas"><ui-switch-thumb></ui-switch-thumb></ui-switch></label>
+            <div class="actions">
+              <button class="btn primary" id="bRead">Leer medidor · mes 1</button>
+              <button class="btn bad" id="bBadRead" disabled>Intentar firmar una lectura menor</button>
+            </div>
+          </ui-tabs-panel>
+
+          <ui-tabs-panel value="objecion">
+            <h3 class="panel-title">7 días para objetar</h3>
+            <p class="panel-sub">Terminó la medición. Antes de pagar, cualquier vecino que aportó puede revisar las lecturas y <b>objetar</b>. Si lo hace, el proyecto se congela hasta que la mayoría del comité firme la lectura real.</p>
+            <div class="compare">
+              <div class="card" id="cmpRep"><div class="lbl">Energía firmada en el contrato</div><div class="v" id="repV">—</div></div>
+              <div class="card"><div class="lbl">Lo que generaron de verdad</div><div class="v" id="realV">—</div></div>
+            </div>
+            <div class="actions" id="objActions">
+              <button class="btn bad" id="bDispute">🙋 Doña Ana objeta · dispute()</button>
+              <button class="btn" id="bWait">Esperar 7 días sin objeciones</button>
+            </div>
+            <div id="resolveBox" hidden>
+              <p class="panel-sub" style="margin-top:16px">Proyecto <b>congelado</b>. El comité vuelve a leer el medidor y firma la lectura real (2 de 3):</p>
+              <div class="people" id="resolvers"></div>
+            </div>
+          </ui-tabs-panel>
+
+          <ui-tabs-panel value="liquidacion">
+            <h3 class="panel-title">Liquidación</h3>
+            <p class="panel-sub" id="settleSub"></p>
+            <div class="split" role="img" aria-label="Reparto del fondo"><div class="s-adv" id="sAdv"></div><div class="s-fin" id="sFin"></div><div class="s-ref" id="sRef"></div></div>
+            <div class="legend">
+              <div><span><i class="dot" style="background:var(--sun-soft)"></i>Adelanto al instalar</span><b class="mono" id="lAdv">—</b></div>
+              <div><span><i class="dot" style="background:var(--sun)"></i>Pago final por energía</span><b class="mono" id="lFin">—</b></div>
+              <div><span><i class="dot" style="background:var(--leaf-soft)"></i>Vuelve a los vecinos</span><b class="mono" id="lRef">—</b></div>
+            </div>
+            <div class="actions"><button class="btn sun" id="bSettle">Liquidar · settle()</button>
+              <ui-dialog>
+                <ui-dialog-trigger><button class="btn ghost" type="button">Ver la fórmula</button></ui-dialog-trigger>
+                <ui-dialog-backdrop hidden></ui-dialog-backdrop>
+                <ui-dialog-content hidden>
+                  <ui-dialog-title>La fórmula del contrato</ui-dialog-title>
+                  <ui-dialog-description>Todo en enteros, igual que en Rust.</ui-dialog-description>
+<pre class="formula">ganado     = total × min(generado, prometido) / prometido
+pago final = max(ganado − adelanto, 0)
+reembolso  = aporte × (total − pagado) / total</pre>
+                  <p>Si los paneles generan de más, el pago tiene tope del 100%. Si generan menos que el adelanto, el instalador no devuelve nada, pero tampoco cobra más.</p>
+                  <div class="actions"><ui-dialog-close><button class="btn primary" type="button">Cerrar</button></ui-dialog-close></div>
+                </ui-dialog-content>
+              </ui-dialog>
+            </div>
+            <div class="people" id="refunders" style="margin-top:16px"></div>
+            <div class="verdict" id="verdict" aria-live="polite"></div>
+          </ui-tabs-panel>
+        </ui-tabs>
       </div>
-      <table><thead><tr><th>Vecino</th><th>Reembolso</th></tr></thead><tbody id="refunds"></tbody></table>
-    </section>
-  </div>
 
-  <div class="steps">
-    <div class="step"><b>Aportan</b>La plata queda bloqueada en el contrato, no en una cuenta personal.</div>
-    <div class="step"><b>Se instala</b>2 de 3 del comité firman → adelanto para comprar equipo.</div>
-    <div class="step"><b>Se mide</b>Lecturas absolutas firmadas por mayoría. El medidor nunca retrocede.</div>
-    <div class="step"><b>Se liquida</b>Pago proporcional a la energía. Sin instalación a tiempo: 100% de vuelta.</div>
-  </div>
+      <aside class="contract" aria-label="Estado del contrato">
+        <div class="vault" id="vault">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="lbl">Contrato · escrow</span><span class="status" id="status">Sin crear</span></div>
+          <div class="big" id="escrowV">₡0</div>
+          <div class="row"><span>Total aportado</span><span id="totalV">₡0</span></div>
+          <div class="row"><span>Pagado al instalador</span><span id="instV">₡0</span></div>
+          <div class="row"><span>kWh firmados</span><span id="kwhV">0</span></div>
+          <div class="phases" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="card" id="installerCard" style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px">
+          <span><b>Solar Tico S.A.</b><br><span style="font-size:13px;color:var(--muted)">Instalador</span></span>
+          <span class="mono" id="installerBox" style="font-weight:700">₡0</span>
+        </div>
+        <div class="log" id="log" aria-live="polite"><h3>Llamadas al contrato</h3></div>
+        <button class="btn ghost" id="bReset">↺ Reiniciar simulación</button>
+      </aside>
+    </div>
+  </section>
 
-  <footer>Simulador que replica las fórmulas del contrato <code>contracts/sol-comunitario/src/lib.rs</code>. Reto individual · Pura Vida Bootcamp · Oppia Climb.</footer>
-</main>
-<script>
-const $ = id => document.getElementById(id);
-const neighbors = [["Doña Ana",7500],["Beto (pulpería)",2500],["Escuela",0]];
-const members = ["Comité 1","Comité 2","Comité 3"];
-const signed = new Set();
-const fmt = n => Math.floor(n).toLocaleString("es-CR");
+  <footer>
+    Reto individual · Pura Vida Bootcamp (Oppia Climb) · semana 2. Código en <a href="https://github.com/ReLichtyy/sol-comunitario">github.com/ReLichtyy/sol-comunitario</a> · 22 pruebas.
+    El simulador replica la lógica de <span class="mono">contracts/sol-comunitario/src/lib.rs</span>; no está conectado a la red.
+  </footer>
+</div>
 
-$("neighbors").innerHTML = neighbors.map((n,i)=>
-  `<div class="nb"><span>${n[0]}</span><input type="number" min="0" step="100" value="${n[1]}" data-i="${i}" aria-label="Aporte de ${n[0]}"></div>`).join("");
-$("committee").innerHTML = members.map((m,i)=>
-  `<button class="sig" aria-pressed="false" data-i="${i}">✍ ${m}</button>`).join("");
+<div class="toast" id="toast" role="status"></div>
 
-document.querySelectorAll(".nb input").forEach(el=>el.addEventListener("input",e=>{
-  neighbors[e.target.dataset.i][1] = Math.max(0, +e.target.value || 0); render();
-}));
-document.querySelectorAll(".sig").forEach(el=>el.addEventListener("click",e=>{
-  const i = e.currentTarget.dataset.i;
-  signed.has(i) ? signed.delete(i) : signed.add(i);
-  e.currentTarget.setAttribute("aria-pressed", signed.has(i)); render();
-}));
-["promised","advance","perf"].forEach(id=>$(id).addEventListener("input",render));
+<script type="module">
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const fmt = n => "₡" + Math.floor(n).toLocaleString("es-CR");
+const fmtN = n => Math.floor(n).toLocaleString("es-CR");
+const wait = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
 
-function render(){
-  const promised = +$("promised").value, advBps = +$("advance").value * 100, perf = +$("perf").value;
-  $("promisedV").textContent = fmt(promised)+" kWh";
-  $("advanceV").textContent = advBps/100+"%";
-  const total = neighbors.reduce((a,n)=>a+n[1],0);
-  const installed = signed.size >= 2 && total > 0;
-  $("instStatus").innerHTML = installed
-    ? `<span class="ok">✓ ${signed.size}/3 firmas · instalación confirmada</span>`
-    : `<span class="no">${signed.size}/3 firmas · ${total===0?"sin fondos":"falta mayoría"} — si vence el plazo, todos recuperan el 100%</span>`;
+$("#rays").innerHTML = Array.from({length: 24}, (_, i) => {
+  const a = i * 15 * Math.PI / 180, r1 = 70, r2 = i % 2 ? 86 : 96;
+  return `<line x1="${100 + r1 * Math.cos(a)}" y1="${100 + r1 * Math.sin(a)}" x2="${100 + r2 * Math.cos(a)}" y2="${100 + r2 * Math.sin(a)}"/>`;
+}).join("");
+$("#panelArt").innerHTML = Array.from({length: 12}, (_, i) => `<i style="--d:${i}"></i>`).join("");
+const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add("in")), {threshold: .15});
+$$(".reveal").forEach(el => io.observe(el));
 
-  const generated = installed ? Math.round(promised * perf / 100) : 0;
-  $("perfV").textContent = installed ? `${perf}% · ${fmt(generated)} kWh` : "sin instalar";
-  const monthly = [0.3,0.37,0.33].map(f=>generated*f);
-  const maxH = Math.max(promised, generated) / 3 * 1.4;
-  $("meter").querySelectorAll(".bar").forEach(b=>b.remove());
-  monthly.forEach(m=>{const b=document.createElement("div");b.className="bar";b.style.height=(m/maxH*100)+"%";$("meter").appendChild(b);});
-  $("goal").style.bottom = (promised/3/maxH*100)+"%";
+const NEIGHBORS = [
+  {id: "ana", name: "Doña Ana", role: "Soda La Esquina", amt: 1200000},
+  {id: "beto", name: "Beto", role: "Pulpería El Sol", amt: 800000},
+  {id: "adi", name: "ADI Santa Teresa", role: "Asociación de desarrollo", amt: 1000000},
+];
+const COMMITTEE = [
+  {id: "marta", name: "Marta", role: "Presidenta ADI"},
+  {id: "luis", name: "Luis", role: "Fontanero ASADA"},
+  {id: "sofia", name: "Sofía", role: "Maestra de la escuela"},
+];
+const THRESHOLD = 2, METER0 = 5000, FRAC = [.3, .67, 1];
+const SCEN = {
+  feliz: {perf: 80, cheat: false}, falla: {perf: 15, cheat: false},
+  inflado: {perf: 80, cheat: true}, nunca: {perf: 80, cheat: false, never: true},
+};
+let S, scen = "feliz", cheatOn = false;
 
-  // === Mismas fórmulas que el contrato ===
-  const advance = installed ? Math.floor(total * advBps / 10000) : 0;
-  const delivered = Math.min(generated, promised);
-  const earned = installed ? Math.floor(total * delivered / promised) : 0;
-  const fin = Math.max(earned - advance, 0);
-  const paid = advance + fin, rest = total - paid;
+const fresh = () => ({
+  status: "Sin crear", promised: 1000, advBps: 3000, total: 0, paid: 0, advance: 0,
+  contrib: {}, refunded: {}, approvals: {}, month: 0, readings: [], inflated: [],
+  realMeter: METER0, reported: METER0, kwh: 0, disputed: false,
+});
 
-  const pct = v => total ? v/total*100 : 0;
-  [["sAdv",advance],["sFin",fin],["sRef",rest]].forEach(([id,v])=>{
-    $(id).style.flexGrow = pct(v); $(id).textContent = pct(v) >= 12 ? Math.round(pct(v))+"%" : "";
+const tabs = $("#steps");
+const ORDER = ["acuerdo", "aportes", "instalacion", "medicion", "objecion", "liquidacion"];
+function unlock(step, go = true) {
+  const i = ORDER.indexOf(step);
+  $$("ui-tabs-tab").forEach((t, j) => {
+    if (j <= i) t.removeAttribute("disabled");
+    t.classList.toggle("done", j < i);
   });
-  $("lAdv").textContent = "₡"+fmt(advance); $("lFin").textContent = "₡"+fmt(fin); $("lRef").textContent = "₡"+fmt(rest);
-  $("refunds").innerHTML = neighbors.filter(n=>n[1]>0).map(n=>
-    `<tr><td>${n[0]} aportó ₡${fmt(n[1])}</td><td>₡${fmt(total ? n[1]*rest/total : 0)}</td></tr>`).join("");
+  if (go) setTimeout(() => { tabs.value = step; }, reduce ? 0 : 450);
 }
-render();
+function log(fn, res, ok = true) {
+  const el = document.createElement("div");
+  el.className = "e " + (ok ? "ok" : "err");
+  el.innerHTML = `<span class="fn"></span><span class="r"></span>`;
+  el.firstChild.textContent = fn; el.lastChild.textContent = res;
+  const box = $("#log");
+  box.insertBefore(el, box.children[1] || null);
+}
+let toastT;
+function toast(msg, err = false) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = "toast" + (err ? " err" : ""), 3000);
+}
+function tween(el, from, to, f = fmt, ms = 700) {
+  if (reduce || from === to) { el.textContent = f(to); return; }
+  const t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = f(from + (to - from) * e);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function pulse(el) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+async function coins(fromEl, toEl, n = 5) {
+  if (reduce || !fromEl || !toEl) return;
+  const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
+  await Promise.all(Array.from({length: n}, (_, i) => new Promise(res => {
+    const c = document.createElement("div");
+    c.className = "coin"; c.textContent = "₡"; document.body.appendChild(c);
+    const sx = a.left + a.width / 2 - 11, sy = a.top + a.height / 2 - 11;
+    const ex = b.left + b.width / 2 - 11, ey = b.top + b.height / 2 - 11;
+    const mx = (sx + ex) / 2 + (i - n / 2) * 8, my = Math.min(sy, ey) - 70;
+    c.animate([
+      {transform: `translate(${sx}px,${sy}px) scale(.6)`, opacity: 0},
+      {transform: `translate(${mx}px,${my}px) scale(1)`, opacity: 1, offset: .5},
+      {transform: `translate(${ex}px,${ey}px) scale(.7)`, opacity: .2},
+    ], {duration: 850, delay: i * 90, easing: "cubic-bezier(.3,.7,.3,1)", fill: "both"}).onfinish = () => { c.remove(); res(); };
+  })));
+  pulse(toEl);
+}
+
+let shown;
+const STATUS_ES = {"Sin crear": "Sin crear", Funding: "Recaudando", Expired: "Plazo vencido", Measuring: "Midiendo",
+  Objection: "Período de objeción", Disputed: "En disputa", Ready: "Listo para liquidar", Settled: "Liquidado"};
+const PHASE_IDX = {"Sin crear": -1, Funding: 1, Expired: 2, Measuring: 3, Objection: 4, Disputed: 4, Ready: 4, Settled: 5};
+function paint() {
+  const escrow = S.total - S.paid - Object.values(S.refunded).reduce((a, b) => a + b, 0);
+  tween($("#escrowV"), shown.escrow, escrow); shown.escrow = escrow;
+  tween($("#totalV"), shown.total, S.total); shown.total = S.total;
+  tween($("#instV"), shown.inst, S.paid); tween($("#installerBox"), shown.inst, S.paid); shown.inst = S.paid;
+  tween($("#kwhV"), shown.kwh, S.kwh, fmtN); shown.kwh = S.kwh;
+  $("#status").textContent = STATUS_ES[S.status];
+  $("#status").title = "Estado en el contrato: " + S.status;
+  const idx = PHASE_IDX[S.status];
+  const red = S.status === "Expired" || S.status === "Disputed";
+  $$(".phases i").forEach((p, i) => p.className = i > idx ? "" : red && i === idx ? "bad" : "on");
+}
+
+const sl = id => $("#" + id);
+const num = (id, d) => { const v = Number(sl(id).value); return Number.isFinite(v) ? v : d; };
+function readSliders() {
+  if (S.status === "Sin crear") { S.promised = num("promised", 1000); S.advBps = num("adv", 30) * 100; }
+  $("#promisedV").textContent = fmtN(S.promised) + " kWh";
+  $("#advV").textContent = S.advBps / 100 + "%";
+  $("#perfV").textContent = num("perf", 80) + "%";
+  paintBars();
+}
+["promised", "adv", "perf"].forEach(id => sl(id).addEventListener("valuechange", () => requestAnimationFrame(readSliders)));
+$("#cheat").addEventListener("checkedchange", e => { cheatOn = !!e.detail?.value; });
+
+$("#bCreate").onclick = () => {
+  if (S.status !== "Sin crear") return;
+  readSliders();
+  S.status = "Funding";
+  log(`create_project(solar_tico, marta, "Salón comunal", ${S.promised}, ${S.advBps}, 30, 90)`, "proyecto #0 creado");
+  toast("Acuerdo firmado por Solar Tico y Marta");
+  $("#bCreate").disabled = true;
+  sl("promised").setAttribute("disabled", ""); sl("adv").setAttribute("disabled", "");
+  paint(); renderNeighbors(); unlock("aportes");
+};
+
+function renderNeighbors() {
+  $("#neighbors").innerHTML = NEIGHBORS.map(n => `
+    <div class="person ${S.contrib[n.id] ? "on" : ""}" id="nb-${n.id}">
+      <div class="av">${n.name[0]}</div>
+      <div><div class="nm">${n.name}</div><div class="rl">${n.role}</div></div>
+      <div class="amt">${fmt(n.amt)}</div>
+      <button class="btn ${S.contrib[n.id] ? "" : "sun"}" data-nb="${n.id}" ${S.contrib[n.id] || S.status !== "Funding" ? "disabled" : ""}>${S.contrib[n.id] ? "✓ Aportó" : "Aportar · contribute()"}</button>
+    </div>`).join("");
+}
+$("#neighbors").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-nb]"); if (!btn || btn.disabled) return;
+  const n = NEIGHBORS.find(x => x.id === btn.dataset.nb);
+  btn.disabled = true;
+  await coins($("#nb-" + n.id), $("#vault"));
+  S.contrib[n.id] = n.amt; S.total += n.amt;
+  log(`contribute(${n.id}, 0, ${n.amt})`, "fondos bloqueados en el contrato");
+  renderNeighbors(); paint();
+  $("#bToInstall").disabled = false;
+  if (Object.keys(S.contrib).length === NEIGHBORS.length) unlock("instalacion");
+});
+$("#bToInstall").onclick = () => unlock("instalacion");
+
+function approve(member, key) {
+  const set = S.approvals[key] ??= new Set();
+  if (set.has(member)) return {err: "AlreadyApproved"};
+  set.add(member);
+  if (set.size >= THRESHOLD) return {done: true};
+  return {done: false};
+}
+function renderCommittee(box, key, label, onSign, locked = false) {
+  const set = S.approvals[key] || new Set();
+  box.innerHTML = COMMITTEE.map(c => `
+    <div class="person ${set.has(c.id) ? "on" : ""}" id="${box.id}-${c.id}">
+      <div class="av" style="background:var(--sky-soft)">${c.name[0]}</div>
+      <div><div class="nm">${c.name}</div><div class="rl">${c.role}</div></div>
+      <button class="btn" data-m="${c.id}" ${locked ? "disabled" : ""}>${set.has(c.id) ? "✓ Firmó" : label}</button>
+    </div>`).join("");
+  box.onclick = e => { const b = e.target.closest("[data-m]"); if (b && !b.disabled) onSign(b.dataset.m); };
+}
+function sigBar(n) {
+  $$(".sigs i").forEach((b, i) => b.classList.toggle("on", i < n));
+  $("#sigTxt").textContent = `${Math.min(n, 2)} / 2 firmas`;
+}
+async function signInstall(m) {
+  if (S.status !== "Funding") return;
+  const call = `approve_installation(${m}, 0, ${METER0})`;
+  if (!S.total) { log(call, "Error::NoFunds", false); return toast("No hay fondos: nadie ha aportado", true); }
+  const r = approve(m, "install");
+  if (r.err) { log(call, "Error::" + r.err, false); return toast("Esa persona ya firmó: nadie cuenta doble", true); }
+  log(call, r.done ? "mayoría alcanzada (2/2)" : "firma registrada (1/2)");
+  if (!r.done) {
+    renderCommittee($("#committee"), "install", "Firmar instalación", signInstall); sigBar(1);
+    return toast("1 firma. Falta otra: nadie decide solo");
+  }
+  sigBar(2);
+  renderCommittee($("#committee"), "install", "", () => {}, true);
+  S.advance = Math.floor(S.total * S.advBps / 10000);
+  await coins($("#vault"), $("#installerCard"), 4);
+  S.paid = S.advance; S.status = "Measuring";
+  log("  ↳ adelanto liberado", fmt(S.advance) + " a Solar Tico");
+  toast(`Instalación confirmada · adelanto de ${fmt(S.advance)}`);
+  $("#bExpire").disabled = true;
+  paint(); unlock("medicion");
+}
+$("#bExpire").onclick = () => {
+  if (S.status !== "Funding") return;
+  S.status = "Expired";
+  log("approve_installation(marta, 0, …)", "Error::InstallDeadlinePassed", false);
+  toast("Pasaron 30 días sin instalar: cada vecino recupera el 100%", true);
+  $("#bExpire").disabled = true; renderNeighbors();
+  renderCommittee($("#committee"), "install", "Plazo vencido", () => {}, true);
+  paint(); renderSettle(); unlock("liquidacion");
+};
+
+const perfNow = () => num("perf", 80) / 100;
+function paintBars() {
+  if (!S) return;
+  const monthly = S.promised / 3, max = Math.max(monthly, ...S.readings.map((c, i) => c - (S.readings[i - 1] || 0))) * 1.35;
+  $("#target").style.bottom = (monthly / max * 100) + "%";
+  let prev = 0;
+  $$("#bars .b").forEach((b, i) => {
+    const cum = S.readings[i];
+    if (cum == null) { b.style.height = "0"; b.querySelector("span").textContent = ""; b.classList.remove("inf"); return; }
+    const v = cum - prev; prev = cum;
+    b.style.height = (v / max * 100) + "%";
+    b.classList.toggle("inf", !!S.inflated[i]);
+    b.querySelector("span").textContent = fmtN(v);
+  });
+}
+$("#bRead").onclick = async () => {
+  if (S.status !== "Measuring" || S.month >= 3) return;
+  $("#bRead").disabled = true;
+  const i = S.month;
+  const real = Math.round(METER0 + S.promised * perfNow() * FRAC[i]);
+  const meter = cheatOn ? Math.round(METER0 + (real - METER0) * 1.25) : real;
+  if (meter <= S.reported) {
+    log(`submit_reading(marta, 0, ${meter})`, "Error::MeterNotIncreasing", false);
+    toast("Los paneles no generaron nada este mes: el medidor no avanzó", true);
+  } else {
+    const signers = cheatOn ? ["luis", "sofia"] : ["marta", "luis"];
+    for (const m of signers) {
+      await wait(380);
+      const r = approve(m, "read:" + meter);
+      log(`submit_reading(${m}, 0, ${meter})`, r.done ? "mayoría → lectura aplicada" : "firma 1/2");
+    }
+    S.reported = meter; S.kwh = meter - METER0;
+    tween($("#meterV"), shown.meter, meter, fmtN, 900); shown.meter = meter;
+  }
+  S.realMeter = real;
+  S.readings[i] = S.kwh; S.inflated[i] = cheatOn && meter > real;
+  paintBars(); paint();
+  S.month++;
+  $("#bBadRead").disabled = false;
+  if (S.month < 3) {
+    $("#bRead").textContent = `Leer medidor · mes ${S.month + 1}`;
+    $("#bRead").disabled = false;
+  } else {
+    $("#bRead").textContent = "✓ 90 días medidos";
+    S.status = "Objection";
+    sl("perf").setAttribute("disabled", ""); $("#cheat").setAttribute("disabled", "");
+    toast("Terminaron los 90 días. Empieza el período de objeción");
+    renderObjection(); paint(); unlock("objecion");
+  }
+};
+$("#bBadRead").onclick = () => {
+  const bad = Math.max(METER0, S.reported - 150);
+  log(`submit_reading(marta, 0, ${bad})`, "Error::MeterNotIncreasing", false);
+  toast(`Rechazado: el medidor marca ${fmtN(S.reported)} y nunca retrocede`, true);
+};
+
+function renderObjection() {
+  $("#repV").textContent = fmtN(S.reported - METER0) + " kWh";
+  $("#realV").textContent = fmtN(S.realMeter - METER0) + " kWh";
+  $("#cmpRep").classList.toggle("bad", S.reported !== S.realMeter);
+}
+$("#bDispute").onclick = () => {
+  if (S.status !== "Objection") return;
+  S.status = "Disputed";
+  log("dispute(ana, 0)", "proyecto congelado");
+  log("settle(0)", "Error::InDispute", false);
+  toast("Doña Ana objetó: nadie cobra hasta que el comité corrija", true);
+  $("#objActions").hidden = true; $("#resolveBox").hidden = false;
+  const key = "resolve:" + S.realMeter;
+  const sign = async m => {
+    const r = approve(m, key);
+    if (r.err) return toast("Esa persona ya firmó", true);
+    log(`resolve_dispute(${m}, 0, ${S.realMeter})`, r.done ? "mayoría → lectura corregida" : "firma 1/2");
+    renderCommittee($("#resolvers"), key, "Firmar lectura real", sign, r.done);
+    if (r.done) {
+      S.disputed = S.reported > S.realMeter ? S.reported - S.realMeter : 0;
+      S.reported = S.realMeter; S.kwh = S.realMeter - METER0;
+      tween($("#meterV"), shown.meter, S.realMeter, fmtN); shown.meter = S.realMeter;
+      renderObjection(); paint();
+      await settle(true);
+    }
+  };
+  renderCommittee($("#resolvers"), key, "Firmar lectura real", sign);
+  paint();
+};
+$("#bWait").onclick = () => {
+  if (S.status !== "Objection") return;
+  log("settle(0)  // día 3", "Error::InObjectionPeriod", false);
+  S.status = "Ready";
+  toast("Pasaron 7 días sin objeciones: ya se puede liquidar");
+  $("#objActions").hidden = true;
+  paint(); renderSettle(); unlock("liquidacion");
+};
+
+function calc() {
+  const delivered = Math.min(S.kwh, S.promised);
+  const earned = Math.floor(S.total * delivered / S.promised);
+  return Math.max(earned - S.advance, 0);
+}
+const refundOf = id => S.total ? Math.floor(S.contrib[id] * (S.total - S.paid) / S.total) : 0;
+function renderSettle() {
+  const expired = S.status === "Expired", done = expired || S.status === "Settled";
+  const fin = S.status === "Settled" ? S.paid - S.advance : 0;
+  const rest = done ? S.total - S.paid : 0;
+  const pct = v => S.total ? v / S.total * 100 : 0;
+  [["#sAdv", expired ? 0 : S.advance], ["#sFin", fin], ["#sRef", rest]].forEach(([id, v]) => {
+    $(id).style.flexGrow = pct(v); $(id).textContent = pct(v) >= 11 ? Math.round(pct(v)) + "%" : "";
+  });
+  $("#lAdv").textContent = fmt(expired ? 0 : S.advance);
+  $("#lFin").textContent = done ? fmt(fin) : "—";
+  $("#lRef").textContent = done ? fmt(rest) : "—";
+  $("#bSettle").disabled = S.status !== "Ready";
+  $("#bSettle").hidden = expired;
+  $("#settleSub").innerHTML = expired
+    ? "Nunca se instaló a tiempo. No hay nada que liquidar: cada vecino reclama el <b>100%</b> de su aporte."
+    : 'Cualquiera puede llamar a <span class="mono">settle()</span>: así nadie puede secuestrar la plata simplemente no haciendo nada.';
+  $("#refunders").innerHTML = done ? NEIGHBORS.filter(n => S.contrib[n.id]).map(n => {
+    const got = S.refunded[n.id] != null;
+    return `<div class="person ${got ? "on" : ""}" id="rf-${n.id}"><div class="av">${n.name[0]}</div>
+      <div><div class="nm">${n.name}</div><div class="rl">aportó ${fmt(S.contrib[n.id])}</div></div>
+      <div class="amt">${fmt(got ? S.refunded[n.id] : refundOf(n.id))}</div>
+      <button class="btn ${got ? "" : "sun"}" data-rf="${n.id}" ${got ? "disabled" : ""}>${got ? "✓ Recibido" : "Reclamar · claim_refund()"}</button></div>`;
+  }).join("") : "";
+}
+async function settle(fromDispute = false) {
+  const fin = calc();
+  unlock("liquidacion");
+  await wait(500);
+  if (fin > 0) await coins($("#vault"), $("#installerCard"), 5);
+  S.paid += fin; S.status = "Settled";
+  log(fromDispute ? "  ↳ liquidación automática" : "settle(0)", `pago final ${fmt(fin)} · sobrante ${fmt(S.total - S.paid)}`);
+  paint(); renderSettle(); verdict();
+}
+$("#bSettle").onclick = () => { if (S.status === "Ready") { $("#bSettle").disabled = true; settle(); } };
+$("#refunders").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-rf]"); if (!btn || btn.disabled) return;
+  const id = btn.dataset.rf;
+  btn.disabled = true;
+  const amt = refundOf(id);
+  if (amt > 0) await coins($("#vault"), $("#rf-" + id), 3);
+  S.refunded[id] = amt;
+  log(`claim_refund(${id}, 0)`, fmt(amt));
+  paint(); renderSettle();
+  if (S.status === "Expired") verdict();
+});
+function verdict() {
+  const v = $("#verdict");
+  if (S.status === "Expired") {
+    v.innerHTML = "<b>Resultado:</b> los paneles nunca llegaron, pero la comunidad no perdió nada: el contrato devuelve el 100% a cada vecino.";
+  } else {
+    const kwh = Math.min(S.kwh, S.promised);
+    const perKwh = kwh ? S.paid / kwh : 0;
+    const saved = S.disputed ? ` La objeción de Doña Ana evitó pagar ${fmtN(S.disputed)} kWh inflados.` : "";
+    v.innerHTML = `<b>Resultado:</b> la comunidad pagó ${fmt(S.paid)} por ${fmtN(kwh)} kWh reales (${fmt(perKwh)} por kWh, el precio acordado). ${fmt(S.total - S.paid)} vuelven a los vecinos.${saved}`;
+  }
+  v.classList.add("show");
+}
+
+function setSlider(id, v) { const s = sl(id); s.removeAttribute("disabled"); try { s.value = v; } catch {} }
+function reset() {
+  S = fresh();
+  shown = {escrow: 0, total: 0, inst: 0, kwh: 0, meter: METER0};
+  $("#log").innerHTML = '<h3>Llamadas al contrato</h3><div class="empty">Todavía no hay llamadas. Empezá firmando el acuerdo.</div>';
+  $("#bCreate").disabled = false;
+  $("#bToInstall").disabled = true;
+  $("#bExpire").disabled = false;
+  $("#bRead").disabled = false; $("#bRead").textContent = "Leer medidor · mes 1";
+  $("#bBadRead").disabled = true;
+  $("#objActions").hidden = false; $("#resolveBox").hidden = true;
+  $("#verdict").classList.remove("show");
+  $("#meterV").textContent = fmtN(METER0);
+  $("#repV").textContent = $("#realV").textContent = "—";
+  const sc = SCEN[scen];
+  setSlider("promised", 1000); setSlider("adv", 30); setSlider("perf", sc.perf);
+  const sw = $("#cheat"); sw.removeAttribute("disabled");
+  try { if (sw.api?.setChecked) sw.api.setChecked(sc.cheat); else sw.checked = sc.cheat; } catch {}
+  cheatOn = sc.cheat;
+  renderNeighbors();
+  renderCommittee($("#committee"), "install", "Firmar instalación", signInstall);
+  sigBar(0);
+  $$("ui-tabs-tab").forEach((t, j) => { if (j) t.setAttribute("disabled", ""); t.classList.remove("done"); });
+  tabs.value = "acuerdo";
+  renderSettle(); paint();
+  requestAnimationFrame(readSliders);
+  if (sc.never) toast("Escenario: aportá y luego dejá vencer el plazo en el paso 3");
+  if (sc.cheat) toast("Escenario: modo tramposo activo. ¿Lo detectará Doña Ana?");
+}
+$("#bReset").onclick = reset;
+$$("[data-scen]").forEach(b => b.onclick = () => {
+  scen = b.dataset.scen;
+  $$("[data-scen]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  reset();
+  $("#simulador").scrollIntoView({behavior: reduce ? "auto" : "smooth"});
+});
+
+let booted = false;
+const boot = () => { if (!booted) { booted = true; reset(); } };
+Promise.all(["ui-tabs", "ui-slider", "ui-switch"].map(t => customElements.whenDefined(t))).then(boot);
+setTimeout(boot, 2500);
 </script>
 </body>
 </html>

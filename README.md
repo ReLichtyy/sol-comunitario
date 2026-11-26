@@ -39,8 +39,10 @@ stateDiagram-v2
     Funding --> Expired: pasa el plazo sin instalar
     Expired --> [*]: claim_refund ⇒ 100% a cada vecino
     Measuring --> Measuring: submit_reading x2 de 3 (lectura absoluta del medidor)
-    Measuring --> Closed: termina la ventana de medición
-    Closed --> Settled: settle (lo llama cualquiera) ⇒ pago final al instalador
+    Measuring --> Objection: terminan los 90 días de medición
+    Objection --> Disputed: dispute (un vecino que aportó objeta)
+    Disputed --> Settled: resolve_dispute x2 de 3 (lectura real) ⇒ liquida
+    Objection --> Settled: pasan 7 días sin objeción ⇒ settle (lo llama cualquiera)
     Settled --> [*]: claim_refund ⇒ sobrante proporcional
 ```
 
@@ -74,6 +76,7 @@ reembolso    = aporte del vecino × (total − pagado al instalador) / total
 - 🔐 **Comité con mayoría (2 de 3):** el instalador no puede ponerse de acuerdo con un solo vecino para inflar los números.
 - 📈 **Lecturas absolutas del medidor:** se reporta lo que marca el medidor, que solo puede subir. Si se reporta dos veces el mismo mes o se escribe un número menor, el contrato lo rechaza (`MeterNotIncreasing`).
 - 🗳️ **Si las lecturas no coinciden, no cuentan:** si un miembro dice 300 y otro dice 250, no se aplica ninguna hasta que la mayoría firme el mismo valor.
+- 🙋 **Período de objeción (7 días):** antes de pagar, cualquier vecino que aportó puede objetar las lecturas (`dispute`). El proyecto se congela hasta que la mayoría del comité firme la lectura real (`resolve_dispute`). Así, aunque dos miembros del comité se pongan de acuerdo con el instalador, los vecinos pueden frenarlo.
 - ⏰ **Plazos:** si no se instala a tiempo, todos recuperan el 100%. La liquidación (`settle`) la puede llamar **cualquiera**, así nadie bloquea los fondos dejando de actuar.
 - 🧮 **Tope de adelanto del 50%** y **tope de pago del 100%** aunque los paneles generen de más.
 - 🚫 **Sin doble cobro:** el aporte se borra antes de transferir el reembolso.
@@ -89,7 +92,9 @@ reembolso    = aporte del vecino × (total − pagado al instalador) / total
 | `contribute(neighbor, id, amount)` | Vecino | Aporta fondos, que quedan bloqueados en el contrato. |
 | `approve_installation(member, id, meter_start)` | Miembro del comité | Firma la instalación. Con la mayoría paga el adelanto y empieza a medir. |
 | `submit_reading(member, id, meter)` | Miembro del comité | Firma una lectura absoluta. Con la mayoría actualiza los kWh generados. |
-| `settle(id)` | Cualquiera | Al terminar la ventana, paga al instalador lo que ganó. |
+| `dispute(neighbor, id)` | Vecino que aportó | Durante los 7 días de objeción, congela el proyecto si cree que las lecturas están infladas. |
+| `resolve_dispute(member, id, meter)` | Miembro del comité | Firma la lectura real. Con la mayoría corrige los kWh y liquida en el acto. |
+| `settle(id)` | Cualquiera | Pasados la medición y los 7 días sin objeciones, paga al instalador lo que ganó. |
 | `claim_refund(neighbor, id)` | Vecino | Recupera su parte del sobrante (o el 100% si nunca se instaló). |
 | `get_project`, `get_contribution`, `get_config`, `project_count`, `performance_bps` | — | Consultas. |
 
@@ -131,7 +136,7 @@ stellar contract invoke --id <CONTRACT_ID> --source comite1 --network testnet --
 
 ---
 
-## 5. Pruebas (17 en total, todas ✅)
+## 5. Pruebas (22 en total, todas ✅)
 
 Las pruebas están en [`contracts/sol-comunitario/src/test.rs`](contracts/sol-comunitario/src/test.rs) y se escribieron **antes** del código (TDD).
 
@@ -154,16 +159,23 @@ Las pruebas están en [`contracts/sol-comunitario/src/test.rs`](contracts/sol-co
 | `comite_invalido_y_doble_inicializacion` | El umbral debe ser válido, sin miembros repetidos, y solo se inicializa una vez. |
 | `crear_proyecto_requiere_firma_de_instalador_y_miembro` | Se requieren las dos firmas. |
 | `redondeo_nunca_deja_al_contrato_en_negativo` | Con números "feos", el contrato nunca debe más de lo que tiene. |
+| `no_se_liquida_durante_la_objecion` | Durante los 7 días de objeción, `settle` se rechaza. |
+| `vecino_objeta_y_el_comite_corrige_la_lectura` | Una lectura inflada (1 000 kWh) se corrige a la real (600 kWh) y se paga solo el 60%. |
+| `solo_quien_aporto_puede_objetar` | Alguien que no aportó no puede congelar el proyecto. |
+| `objecion_solo_dentro_del_plazo` | No se puede objetar ni durante la medición ni después de los 7 días. |
+| `resolver_requiere_disputa_abierta_y_comite` | Solo el comité resuelve, solo con una disputa abierta y con lecturas válidas. |
 
 ```
-test result: ok. 17 passed; 0 failed
+test result: ok. 22 passed; 0 failed
 ```
 
 ---
 
 ## 6. Simulador visual
 
-[`docs/index.html`](docs/index.html) es una página que **usa las mismas fórmulas del contrato**: movés los aportes, firmás como comité, cambiás el rendimiento de los paneles y ves en vivo cuánto cobra el instalador y cuánto vuelve a cada vecino.
+**https://relichtyy.github.io/sol-comunitario/** es una página que **replica las reglas del contrato** paso a paso: firmás el acuerdo, los vecinos aportan (con monedas que vuelan a la bóveda), el comité firma 2 de 3, se leen 3 meses del medidor, viene el período de objeción y al final la liquidación con los reembolsos. A la derecha se ve en vivo el estado del contrato y cada función que se llama, incluidos los errores (`Error::MeterNotIncreasing`, `Error::InObjectionPeriod`…).
+
+Tiene 4 escenarios: **rinde 80%**, **rinde 15%**, **lecturas infladas** (el comité hace trampa y Doña Ana objeta) y **nunca se instala**. Está hecha con componentes de [ui-sdk](https://ui-sdk.dev) (tabs, slider, switch, dialog y tooltip) y respeta `prefers-reduced-motion`.
 
 ---
 

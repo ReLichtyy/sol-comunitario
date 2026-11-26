@@ -12,9 +12,12 @@
 //!    inicial del medidor), el instalador recibe el adelanto.
 //! 4. Durante la ventana, la mayoría del comité firma lecturas ABSOLUTAS del
 //!    medidor. El medidor nunca puede retroceder: imposible contar doble.
-//! 5. Al cierre (`settle`, lo llama cualquiera) el instalador cobra
+//! 5. Al terminar la medición hay OBJECTION_DAYS para que un vecino que
+//!    aportó objete (`dispute`); el comité fija la lectura real por mayoría
+//!    (`resolve_dispute`) y se liquida con ella.
+//! 6. Sin objeciones (`settle`, lo llama cualquiera) el instalador cobra
 //!    `total * min(generado, prometido) / prometido - adelanto`.
-//! 6. Lo que sobra vuelve a los vecinos, proporcional a su aporte.
+//! 7. Lo que sobra vuelve a los vecinos, proporcional a su aporte.
 //!    Si nunca se instala a tiempo, cada vecino recupera el 100%.
 
 use soroban_sdk::{
@@ -29,6 +32,8 @@ pub const MAX_ADVANCE_BPS: u32 = 5_000;
 pub const BPS: i128 = 10_000;
 /// Largo máximo del nombre del proyecto (bytes).
 pub const MAX_NAME_LEN: u32 = 64;
+/// Días, después de la medición, en que un vecino puede objetar las lecturas.
+pub const OBJECTION_DAYS: u64 = 7;
 
 const BUMP_LOW: u32 = 100_000;
 const BUMP_HIGH: u32 = 1_000_000;
@@ -57,6 +62,11 @@ pub enum Error {
     AlreadyApproved = 18,
     MeterNotIncreasing = 19,
     NameTooLong = 20,
+    InObjectionPeriod = 21,
+    InDispute = 22,
+    NotDisputable = 23,
+    NotContributor = 24,
+    NotDisputed = 25,
 }
 
 #[contracttype]
@@ -69,6 +79,8 @@ pub enum Status {
     Measuring = 1,
     /// Liquidado: instalador pagado, vecinos reclaman el sobrante.
     Settled = 2,
+    /// Un vecino objetó las lecturas; el comité debe fijar la lectura real.
+    Disputed = 3,
 }
 
 #[contracttype]
@@ -114,6 +126,8 @@ pub enum Action {
     Install(i128),
     /// Lectura absoluta del medidor.
     Reading(i128),
+    /// Lectura corregida que resuelve una disputa.
+    Resolve(i128),
 }
 
 #[contracttype]
@@ -133,8 +147,11 @@ enum Phase {
     /// Nunca se instaló y pasó el plazo.
     Expired,
     Measuring,
-    /// Ventana de medición terminada, falta liquidar.
-    Closed,
+    /// Medición terminada: los vecinos pueden objetar durante OBJECTION_DAYS.
+    Objection,
+    Disputed,
+    /// Sin objeciones: listo para liquidar.
+    Ready,
     Settled,
 }
 
@@ -291,7 +308,9 @@ impl SolComunitario {
         let mut p = Self::load(&env, id)?;
         match Self::phase(&env, &p) {
             Phase::Measuring => {}
-            Phase::Closed => return Err(Error::MeasurementClosed),
+            Phase::Objection | Phase::Disputed | Phase::Ready => {
+                return Err(Error::MeasurementClosed)
+            }
             _ => return Err(Error::NotMeasuring),
         }
         if meter <= p.meter_start + p.kwh_generated {
@@ -309,31 +328,61 @@ impl SolComunitario {
         Ok(true)
     }
 
-    /// Cierra el proyecto al terminar la ventana. Cualquiera puede llamarlo,
-    /// así nadie puede "secuestrar" los fondos no llamando.
+    /// Un vecino que aportó objeta las lecturas durante el período de
+    /// objeción. El proyecto queda congelado hasta que el comité lo resuelva.
+    pub fn dispute(env: Env, neighbor: Address, id: u32) -> Result<(), Error> {
+        neighbor.require_auth();
+        let mut p = Self::load(&env, id)?;
+        if Self::contribution(&env, &DataKey::Contribution(id, neighbor.clone())) == 0 {
+            return Err(Error::NotContributor);
+        }
+        if Self::phase(&env, &p) != Phase::Objection {
+            return Err(Error::NotDisputable);
+        }
+        p.status = Status::Disputed;
+        Self::save(&env, id, &p);
+
+        env.events()
+            .publish((symbol_short!("disputa"), id), (neighbor, p.kwh_generated));
+        Ok(())
+    }
+
+    /// Un miembro del comité firma la lectura correcta del medidor para
+    /// resolver una disputa (puede ser menor a la reportada). Con mayoría,
+    /// se corrige y se liquida en el acto.
+    /// Devuelve `true` si esta firma completó la mayoría.
+    pub fn resolve_dispute(env: Env, member: Address, id: u32, meter: i128) -> Result<bool, Error> {
+        let cfg = Self::config(&env)?;
+        let mut p = Self::load(&env, id)?;
+        if p.status != Status::Disputed {
+            return Err(Error::NotDisputed);
+        }
+        Self::require_member(&cfg, &member)?;
+        if meter < p.meter_start {
+            return Err(Error::InvalidAmount);
+        }
+        if !Self::approve(&env, &cfg, &member, id, Action::Resolve(meter))? {
+            return Ok(false);
+        }
+        p.kwh_generated = meter - p.meter_start;
+        Self::finish(&env, &cfg, id, &mut p);
+        Ok(true)
+    }
+
+    /// Cierra el proyecto cuando terminó la medición y el período de
+    /// objeción sin disputas. Cualquiera puede llamarlo, así nadie puede
+    /// "secuestrar" los fondos no llamando.
     /// Devuelve el pago final al instalador.
     pub fn settle(env: Env, id: u32) -> Result<i128, Error> {
         let mut p = Self::load(&env, id)?;
         match Self::phase(&env, &p) {
-            Phase::Closed => {}
+            Phase::Ready => {}
             Phase::Measuring => return Err(Error::MeasurementStillOpen),
+            Phase::Objection => return Err(Error::InObjectionPeriod),
+            Phase::Disputed => return Err(Error::InDispute),
             _ => return Err(Error::NotMeasuring),
         }
-
-        let delivered = p.kwh_generated.min(p.kwh_promised);
-        let earned = p.total * delivered / p.kwh_promised;
-        let final_pay = (earned - p.paid_to_installer).max(0);
-
-        Self::pay(&env, &Self::config(&env)?, &p.installer, final_pay);
-        p.paid_to_installer += final_pay;
-        p.status = Status::Settled;
-        Self::save(&env, id, &p);
-
-        env.events().publish(
-            (symbol_short!("settle"), id),
-            (final_pay, p.total - p.paid_to_installer),
-        );
-        Ok(final_pay)
+        Ok(Self::finish(&env, &Self::config(&env)?, id, &mut p))
     }
 
     /// Un vecino recupera su parte de lo que no se pagó al instalador:
@@ -395,10 +444,30 @@ impl SolComunitario {
         match p.status {
             Status::Funding if now > p.install_deadline => Phase::Expired,
             Status::Funding => Phase::Funding,
-            Status::Measuring if now > p.measure_end => Phase::Closed,
-            Status::Measuring => Phase::Measuring,
+            Status::Measuring if now <= p.measure_end => Phase::Measuring,
+            Status::Measuring if now <= p.measure_end + OBJECTION_DAYS * DAY => Phase::Objection,
+            Status::Measuring => Phase::Ready,
+            Status::Disputed => Phase::Disputed,
             Status::Settled => Phase::Settled,
         }
+    }
+
+    /// Paga al instalador lo ganado y marca el proyecto como liquidado.
+    fn finish(env: &Env, cfg: &Config, id: u32, p: &mut Project) -> i128 {
+        let delivered = p.kwh_generated.min(p.kwh_promised);
+        let earned = p.total * delivered / p.kwh_promised;
+        let final_pay = (earned - p.paid_to_installer).max(0);
+
+        Self::pay(env, cfg, &p.installer, final_pay);
+        p.paid_to_installer += final_pay;
+        p.status = Status::Settled;
+        Self::save(env, id, p);
+
+        env.events().publish(
+            (symbol_short!("settle"), id),
+            (final_pay, p.total - p.paid_to_installer),
+        );
+        final_pay
     }
 
     fn require_funding(env: &Env, p: &Project) -> Result<(), Error> {
