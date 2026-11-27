@@ -25,6 +25,13 @@ use soroban_sdk::{
     Vec,
 };
 
+// Metadatos SEP-46: quedan grabados en el WASM y cualquiera los lee con
+// `stellar contract info meta`.
+soroban_sdk::contractmeta!(key = "name", val = "Sol Comunitario");
+soroban_sdk::contractmeta!(key = "version", val = "0.3.0");
+soroban_sdk::contractmeta!(key = "description", val = "Escrow solar comunitario: pago por kWh generado, comite 2 de 3, objecion y credenciales rotables");
+soroban_sdk::contractmeta!(key = "source_repo", val = "https://github.com/ReLichtyy/sol-comunitario");
+
 /// Segundos en un día.
 pub const DAY: u64 = 86_400;
 /// Adelanto máximo permitido: 50% (en puntos base).
@@ -83,10 +90,26 @@ pub enum Status {
     Disputed = 3,
 }
 
+/// Credencial on-chain de un miembro del comité (estilo DID).
+///
+/// On-chain va solo lo que el contrato necesita para autorizar: la cuenta
+/// (G… o C…), el rol público y desde cuándo está vigente. El DID
+/// (`did:pkh:stellar:<red>:<cuenta>`) se deriva de `account` fuera de la
+/// cadena; nombre, cédula o teléfono NUNCA se guardan aquí.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Member {
+    pub account: Address,
+    /// Ej. "Presidenta ADI".
+    pub role: String,
+    /// Timestamp desde el que esta llave es válida (lo fija el contrato).
+    pub since: u64,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
-    pub committee: Vec<Address>,
+    pub committee: Vec<Member>,
     pub threshold: u32,
     pub token: Address,
 }
@@ -128,7 +151,14 @@ pub enum Action {
     Reading(i128),
     /// Lectura corregida que resuelve una disputa.
     Resolve(i128),
+    /// Cambiar la llave de un miembro (vieja, nueva), conservando su rol.
+    Rotate(Address, Address),
+    /// Sacar a un miembro del comité.
+    Revoke(Address),
 }
+
+/// Las aprobaciones de gobierno del comité no pertenecen a ningún proyecto.
+const GOVERNANCE: u32 = u32::MAX;
 
 #[contracttype]
 #[derive(Clone)]
@@ -160,10 +190,10 @@ pub struct SolComunitario;
 
 #[contractimpl]
 impl SolComunitario {
-    /// Configura el comité (miembros + firmas necesarias) y el token de pago.
+    /// Configura el comité (credenciales + firmas necesarias) y el token de pago.
     pub fn initialize(
         env: Env,
-        committee: Vec<Address>,
+        committee: Vec<Member>,
         threshold: u32,
         token: Address,
     ) -> Result<(), Error> {
@@ -173,16 +203,63 @@ impl SolComunitario {
         if threshold == 0 || threshold > committee.len() {
             return Err(Error::InvalidCommittee);
         }
+        let now = env.ledger().timestamp();
+        let mut members = Vec::new(&env);
         for (i, m) in committee.iter().enumerate() {
-            if committee.iter().skip(i + 1).any(|o| o == m) {
+            if committee.iter().skip(i + 1).any(|o| o.account == m.account) {
                 return Err(Error::InvalidCommittee);
             }
-            m.require_auth();
+            m.account.require_auth();
+            members.push_back(Member { since: now, ..m });
         }
-        let st = env.storage().instance();
-        st.set(&DataKey::Config, &Config { committee, threshold, token });
-        st.extend_ttl(BUMP_LOW, BUMP_HIGH);
+        Self::save_config(&env, &Config { committee: members, threshold, token });
         Ok(())
+    }
+
+    /// Un miembro firma el cambio de llave de `old` a `new` (ej. perdió el
+    /// celular). Con mayoría, `new` hereda el rol de `old` y `old` deja de
+    /// poder firmar. Devuelve `true` si esta firma completó la mayoría.
+    pub fn rotate_member(env: Env, member: Address, old: Address, new: Address) -> Result<bool, Error> {
+        let mut cfg = Self::config(&env)?;
+        let idx = Self::member_index(&cfg, &old).ok_or(Error::NotCommitteeMember)?;
+        if Self::member_index(&cfg, &new).is_some() {
+            return Err(Error::InvalidCommittee);
+        }
+        if !Self::approve(&env, &cfg, &member, GOVERNANCE, Action::Rotate(old.clone(), new.clone()))? {
+            return Ok(false);
+        }
+        let role = cfg.committee.get_unchecked(idx).role;
+        let since = env.ledger().timestamp();
+        cfg.committee.set(idx, Member { account: new.clone(), role, since });
+        Self::save_config(&env, &cfg);
+
+        env.events().publish((symbol_short!("rotar"),), (old, new));
+        Ok(true)
+    }
+
+    /// Un miembro firma sacar a `target` del comité. No se permite si el
+    /// comité quedaría con menos miembros que firmas necesarias.
+    /// Devuelve `true` si esta firma completó la mayoría.
+    pub fn revoke_member(env: Env, member: Address, target: Address) -> Result<bool, Error> {
+        let mut cfg = Self::config(&env)?;
+        let idx = Self::member_index(&cfg, &target).ok_or(Error::NotCommitteeMember)?;
+        if cfg.committee.len() - 1 < cfg.threshold {
+            return Err(Error::InvalidCommittee);
+        }
+        if !Self::approve(&env, &cfg, &member, GOVERNANCE, Action::Revoke(target.clone()))? {
+            return Ok(false);
+        }
+        cfg.committee.remove(idx);
+        Self::save_config(&env, &cfg);
+
+        env.events().publish((symbol_short!("revocar"),), target);
+        Ok(true)
+    }
+
+    pub fn is_member(env: Env, account: Address) -> bool {
+        Self::config(&env)
+            .map(|cfg| Self::member_index(&cfg, &account).is_some())
+            .unwrap_or(false)
     }
 
     /// El instalador y un miembro del comité acuerdan un proyecto. Devuelve su id.
@@ -479,11 +556,22 @@ impl SolComunitario {
     }
 
     fn require_member(cfg: &Config, member: &Address) -> Result<(), Error> {
-        if cfg.committee.contains(member) {
-            Ok(())
-        } else {
-            Err(Error::NotCommitteeMember)
-        }
+        Self::member_index(cfg, member)
+            .map(|_| ())
+            .ok_or(Error::NotCommitteeMember)
+    }
+
+    fn member_index(cfg: &Config, account: &Address) -> Option<u32> {
+        cfg.committee
+            .iter()
+            .position(|m| m.account == *account)
+            .map(|i| i as u32)
+    }
+
+    fn save_config(env: &Env, cfg: &Config) {
+        let st = env.storage().instance();
+        st.set(&DataKey::Config, cfg);
+        st.extend_ttl(BUMP_LOW, BUMP_HIGH);
     }
 
     /// Registra la firma de `member` para `action`. Devuelve `true` cuando se

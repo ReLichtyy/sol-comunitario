@@ -1,4 +1,5 @@
 #![cfg(test)]
+extern crate std;
 
 use super::*;
 use soroban_sdk::{
@@ -35,13 +36,23 @@ fn setup() -> Setup<'static> {
     let contract_id = env.register(SolComunitario, ());
     let client = SolComunitarioClient::new(&env, &contract_id);
     client.initialize(
-        &vec![&env, c1.clone(), c2.clone(), c3.clone()],
+        &vec![
+            &env,
+            m(&env, &c1, "Presidenta ADI"),
+            m(&env, &c2, "Fontanero ASADA"),
+            m(&env, &c3, "Maestra de la escuela"),
+        ],
         &2,
         &sac.address(),
     );
 
     let token = TokenClient::new(&env, &sac.address());
     Setup { env, client, token, installer, c1, c2, c3, ana, beto }
+}
+
+/// Credencial de un miembro del comité (`since` lo pone el contrato).
+fn m(env: &Env, account: &Address, role: &str) -> Member {
+    Member { account: account.clone(), role: String::from_str(env, role), since: 0 }
 }
 
 fn new_project_with(s: &Setup, name: &str, kwh: i128, advance_bps: u32) -> u32 {
@@ -358,7 +369,7 @@ fn comite_invalido_y_doble_inicializacion() {
     let other = Address::generate(&s.env);
     assert_eq!(
         s.client
-            .try_initialize(&vec![&s.env, other.clone()], &1, &other),
+            .try_initialize(&vec![&s.env, m(&s.env, &other, "x")], &1, &other),
         Err(Ok(Error::AlreadyInitialized))
     );
 
@@ -369,15 +380,15 @@ fn comite_invalido_y_doble_inicializacion() {
     let b = Address::generate(&env);
     // umbral 0, umbral > miembros, miembros repetidos
     assert_eq!(
-        fresh.try_initialize(&vec![&env, a.clone(), b.clone()], &0, &a),
+        fresh.try_initialize(&vec![&env, m(&env, &a, "a"), m(&env, &b, "b")], &0, &a),
         Err(Ok(Error::InvalidCommittee))
     );
     assert_eq!(
-        fresh.try_initialize(&vec![&env, a.clone(), b.clone()], &3, &a),
+        fresh.try_initialize(&vec![&env, m(&env, &a, "a"), m(&env, &b, "b")], &3, &a),
         Err(Ok(Error::InvalidCommittee))
     );
     assert_eq!(
-        fresh.try_initialize(&vec![&env, a.clone(), a.clone()], &2, &a),
+        fresh.try_initialize(&vec![&env, m(&env, &a, "a"), m(&env, &a, "a")], &2, &a),
         Err(Ok(Error::InvalidCommittee))
     );
 }
@@ -503,5 +514,83 @@ fn resolver_requiere_disputa_abierta_y_comite() {
     assert_eq!(
         s.client.try_resolve_dispute(&s.c1, &id, &-1),
         Err(Ok(Error::InvalidAmount))
+    );
+}
+
+// ---------------- identidad del comité (estilo DID) ----------------
+
+#[test]
+fn las_credenciales_guardan_rol_y_fecha() {
+    let s = setup();
+    let cfg = s.client.get_config();
+    assert_eq!(cfg.committee.len(), 3);
+    let marta = cfg.committee.get(0).unwrap();
+    assert_eq!(marta.account, s.c1);
+    assert_eq!(marta.role, String::from_str(&s.env, "Presidenta ADI"));
+    assert!(s.client.is_member(&s.c2));
+    assert!(!s.client.is_member(&s.ana));
+}
+
+#[test]
+fn luis_pierde_el_celular_y_rota_su_llave() {
+    let s = setup();
+    let luis_nuevo = Address::generate(&s.env);
+    advance_days(&s.env, 5);
+
+    // Luis (c2) ya no tiene su llave: firman Marta (c1) y Sofía (c3).
+    assert!(!s.client.rotate_member(&s.c1, &s.c2, &luis_nuevo));
+    assert!(s.client.rotate_member(&s.c3, &s.c2, &luis_nuevo));
+
+    // Mismo rol, nueva llave, nueva fecha de vigencia.
+    let cfg = s.client.get_config();
+    let luis = cfg.committee.iter().find(|m| m.account == luis_nuevo).unwrap();
+    assert_eq!(luis.role, String::from_str(&s.env, "Fontanero ASADA"));
+    assert_eq!(luis.since, 5 * DAY);
+    assert!(!s.client.is_member(&s.c2));
+
+    // La llave vieja ya no firma; la nueva sí.
+    let id = new_project(&s);
+    s.client.contribute(&s.ana, &id, &1_000);
+    assert_eq!(
+        s.client.try_approve_installation(&s.c2, &id, &0),
+        Err(Ok(Error::NotCommitteeMember))
+    );
+    assert!(!s.client.approve_installation(&luis_nuevo, &id, &0));
+    assert!(s.client.approve_installation(&s.c1, &id, &0));
+}
+
+#[test]
+fn rotar_valida_miembros() {
+    let s = setup();
+    let x = Address::generate(&s.env);
+    // `old` debe ser miembro.
+    assert_eq!(
+        s.client.try_rotate_member(&s.c1, &s.ana, &x),
+        Err(Ok(Error::NotCommitteeMember))
+    );
+    // `new` no puede ser alguien que ya está en el comité.
+    assert_eq!(
+        s.client.try_rotate_member(&s.c1, &s.c2, &s.c3),
+        Err(Ok(Error::InvalidCommittee))
+    );
+    // Un extraño no puede firmar la rotación.
+    assert_eq!(
+        s.client.try_rotate_member(&s.ana, &s.c2, &x),
+        Err(Ok(Error::NotCommitteeMember))
+    );
+}
+
+#[test]
+fn revocar_miembro_con_mayoria_sin_romper_el_umbral() {
+    let s = setup();
+    assert!(!s.client.revoke_member(&s.c1, &s.c3));
+    assert!(s.client.revoke_member(&s.c2, &s.c3));
+    assert_eq!(s.client.get_config().committee.len(), 2);
+    assert!(!s.client.is_member(&s.c3));
+
+    // Quedan 2 con umbral 2: revocar otro dejaría el comité inservible.
+    assert_eq!(
+        s.client.try_revoke_member(&s.c1, &s.c2),
+        Err(Ok(Error::InvalidCommittee))
     );
 }

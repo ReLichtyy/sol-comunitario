@@ -87,20 +87,71 @@ reembolso    = aporte del vecino × (total − pagado al instalador) / total
 
 | Función | Quién firma | Qué hace |
 |---|---|---|
-| `initialize(committee, threshold, token)` | Todo el comité | Configura los miembros, cuántas firmas se necesitan y el token (USDC o XLM). |
+| `initialize(committee, threshold, token)` | Todo el comité | Configura las credenciales de los miembros (cuenta + rol), cuántas firmas se necesitan y el token (USDC o XLM). |
 | `create_project(installer, member, name, kwh_promised, advance_bps, install_days, measure_days)` | Instalador + un miembro | Crea el acuerdo. Devuelve el `id`. |
 | `contribute(neighbor, id, amount)` | Vecino | Aporta fondos, que quedan bloqueados en el contrato. |
 | `approve_installation(member, id, meter_start)` | Miembro del comité | Firma la instalación. Con la mayoría paga el adelanto y empieza a medir. |
 | `submit_reading(member, id, meter)` | Miembro del comité | Firma una lectura absoluta. Con la mayoría actualiza los kWh generados. |
 | `dispute(neighbor, id)` | Vecino que aportó | Durante los 7 días de objeción, congela el proyecto si cree que las lecturas están infladas. |
 | `resolve_dispute(member, id, meter)` | Miembro del comité | Firma la lectura real. Con la mayoría corrige los kWh y liquida en el acto. |
+| `rotate_member(member, old, new)` | Miembro del comité | Firma el cambio de llave de un miembro (ej. perdió el celular). Con la mayoría, la nueva llave hereda el rol. |
+| `revoke_member(member, target)` | Miembro del comité | Firma sacar a alguien del comité. No se permite si quedarían menos miembros que firmas necesarias. |
 | `settle(id)` | Cualquiera | Pasados la medición y los 7 días sin objeciones, paga al instalador lo que ganó. |
 | `claim_refund(neighbor, id)` | Vecino | Recupera su parte del sobrante (o el 100% si nunca se instaló). |
-| `get_project`, `get_contribution`, `get_config`, `project_count`, `performance_bps` | — | Consultas. |
+| `get_project`, `get_contribution`, `get_config`, `is_member`, `project_count`, `performance_bps` | — | Consultas. |
 
 ---
 
-## 4. Cómo correrlo
+## 4. Identidad del comité (estilo DID) y estándares
+
+### Qué va on-chain y qué no
+
+**Regla:** en la cadena solo va lo que el contrato necesita para decidir quién puede mover la plata. Todo lo demás va afuera.
+
+| ⛓️ On-chain (en el contrato) | 📄 Off-chain (fuera de la cadena) |
+|---|---|
+| La cuenta G/C de cada miembro del comité | Su DID `did:pkh:stellar:testnet:G…`, que **se calcula** a partir de la cuenta |
+| El rol público ("Presidenta ADI") y la fecha desde la que está vigente (`since`) | Nombre completo, cédula y teléfono. **Nunca on-chain:** la cadena es pública y permanente (Ley 8968 de protección de datos) |
+| Rotar la llave de un miembro (`rotate_member`, 2 de 3) | El `stellar.toml` de la ADI (SEP-1), que dice qué cuentas son suyas |
+| Revocar a un miembro (`revoke_member`, 2 de 3) | Fotos de la instalación y del medidor |
+| Los aportes, las firmas, las lecturas y los pagos | El login (SEP-10/45), los QR para firmar (SEP-7) y el simulador |
+| Eventos de auditoría (`rotar`, `revocar`, `aporte`, `lectura`…) | |
+
+**¿Por qué "estilo DID"?** Un DID separa **quién sos** (tu identidad y tu rol) de **con qué llave firmás**. Si Luis pierde el celular, los otros dos miembros firman `rotate_member` y su nueva llave hereda el rol "Fontanero ASADA". El comité nunca queda con una llave muerta.
+
+### Cuentas G y C
+
+| Prefijo | Qué es |
+|---|---|
+| `G…` | Cuenta clásica de Stellar (llave pública ed25519). Es la de Freighter, Lobstr, etc. |
+| `C…` | Un contrato. También puede ser una *smart wallet*, por ejemplo con passkey (huella o Face ID). |
+
+El contrato usa el tipo `Address` y `require_auth()`, que **aceptan los dos tipos**. Un vecino puede firmar con su wallet normal (G) o con la huella del celular (C) sin cambiar ni una línea del contrato.
+
+### SEPs (Stellar Ecosystem Proposals) que usa o aplica
+
+| SEP | Qué es | En Sol Comunitario |
+|---|---|---|
+| **SEP-41** | Interfaz estándar de tokens | ✅ Los pagos usan `token::Client`, así que funciona con USDC, XLM o cualquier token SEP-41. |
+| **SEP-46** | Metadatos del contrato | ✅ `contractmeta!`: nombre, versión, descripción y repo, grabados en el WASM. |
+| **SEP-48** | Especificación de la interfaz | ✅ La genera el SDK; sirve para `stellar contract bindings` y los exploradores. |
+| SEP-1 | `stellar.toml` | La ADI publica sus cuentas en su dominio (off-chain). |
+| SEP-10 / SEP-45 | Login web con cuenta G / C | Para un frontend real (off-chain). |
+| SEP-7 | URI `web+stellar:` | QR en el salón comunal para firmar desde el celular. |
+| SEP-53 | Firmar mensajes | Siguiente paso: que el medidor firme sus propias lecturas. |
+
+### Equivalencia con los roles de Trustless Work
+
+| Trustless Work | Sol Comunitario |
+|---|---|
+| Service provider / receiver | Instalador |
+| Approver + release signer | Comité 2 de 3 (`approve_installation`, `submit_reading`) |
+| Dispute resolver | Comité 2 de 3 (`resolve_dispute`) |
+| Milestones | Instalación → lecturas mensuales → liquidación |
+
+---
+
+## 5. Cómo correrlo
 
 ### Requisitos
 - [Rust](https://rustup.rs/)
@@ -136,7 +187,7 @@ stellar contract invoke --id <CONTRACT_ID> --source comite1 --network testnet --
 
 ---
 
-## 5. Pruebas (22 en total, todas ✅)
+## 6. Pruebas (26 en total, todas ✅)
 
 Las pruebas están en [`contracts/sol-comunitario/src/test.rs`](contracts/sol-comunitario/src/test.rs) y se escribieron **antes** del código (TDD).
 
@@ -164,14 +215,18 @@ Las pruebas están en [`contracts/sol-comunitario/src/test.rs`](contracts/sol-co
 | `solo_quien_aporto_puede_objetar` | Alguien que no aportó no puede congelar el proyecto. |
 | `objecion_solo_dentro_del_plazo` | No se puede objetar ni durante la medición ni después de los 7 días. |
 | `resolver_requiere_disputa_abierta_y_comite` | Solo el comité resuelve, solo con una disputa abierta y con lecturas válidas. |
+| `las_credenciales_guardan_rol_y_fecha` | Cada miembro queda con su cuenta, su rol y la fecha desde la que está vigente. |
+| `luis_pierde_el_celular_y_rota_su_llave` | Con 2 de 3, la llave nueva hereda el rol; la vieja ya no puede firmar y la nueva sí. |
+| `rotar_valida_miembros` | No se puede rotar a alguien que no es miembro, ni a una cuenta que ya está en el comité, ni firmar si no se es del comité. |
+| `revocar_miembro_con_mayoria_sin_romper_el_umbral` | Se revoca con mayoría, pero nunca se deja al comité con menos miembros que el umbral. |
 
 ```
-test result: ok. 22 passed; 0 failed
+test result: ok. 26 passed; 0 failed
 ```
 
 ---
 
-## 6. Simulador visual
+## 7. Simulador visual
 
 **https://relichtyy.github.io/sol-comunitario/** es una página que **replica las reglas del contrato** paso a paso: firmás el acuerdo, los vecinos aportan (con monedas que vuelan a la bóveda), el comité firma 2 de 3, se leen 3 meses del medidor, viene el período de objeción y al final la liquidación con los reembolsos. A la derecha se ve en vivo el estado del contrato y cada función que se llama, incluidos los errores (`Error::MeterNotIncreasing`, `Error::InObjectionPeriod`…).
 
@@ -179,7 +234,7 @@ Tiene 4 escenarios: **rinde 80%**, **rinde 15%**, **lecturas infladas** (el comi
 
 ---
 
-## 7. Qué sigue (ideas para una versión real)
+## 8. Qué sigue (ideas para una versión real)
 
 - Conectar el medidor directamente con un **oráculo** (medidor IoT) para que firme las lecturas.
 - Usar **Trustless Work** para manejar el escrow con hitos estándar.

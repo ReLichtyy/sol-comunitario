@@ -116,6 +116,13 @@ ui-slider{display:block}
 .person .rl{font-size:13px;color:var(--muted)}
 .person .amt{font:600 14px "JetBrains Mono",monospace}
 .person .btn{justify-content:center}
+.did{font:500 11px "JetBrains Mono",monospace;color:var(--sky);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.since{font:500 11px "JetBrains Mono",monospace;color:var(--muted)}
+.person.rot{animation:rot .9s ease}
+@keyframes rot{30%{box-shadow:0 0 0 3px var(--sky);transform:scale(1.02)}}
+.chainnote{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.chip{font:600 11px "JetBrains Mono",monospace;padding:4px 10px;border-radius:999px;border:1px solid var(--line)}
+.chip.on{background:var(--sun-soft)} .chip.off{background:var(--bg);color:var(--muted)}
 .sigs{display:flex;gap:6px;align-items:center;font:600 13px "JetBrains Mono",monospace;margin-top:14px}
 .sigs i{width:30px;height:8px;border-radius:4px;background:var(--line);transition:background .4s}
 .sigs i.on{background:var(--leaf)}
@@ -315,7 +322,11 @@ footer a{color:var(--sky)}
             <p class="panel-sub">El comité de 3 vecinos revisa los paneles y anota la lectura inicial del medidor. Con <b>2 de 3 firmas</b> el contrato libera el adelanto. Una sola firma no basta: nadie decide solo.</p>
             <div class="people" id="committee"></div>
             <div class="sigs" aria-live="polite"><i></i><i></i><span id="sigTxt">0 / 2 firmas</span></div>
-            <div class="actions"><button class="btn bad" id="bExpire">⌛ Dejar vencer los 30 días sin instalar</button></div>
+            <p class="chainnote"><span class="chip on">⛓ On-chain: cuenta + rol + vigencia</span><span class="chip off">📄 Off-chain: nombre, cédula, DID calculado</span></p>
+            <div class="actions">
+              <button class="btn" id="bRotate">📱 Luis perdió el celular · rotate_member()</button>
+              <button class="btn bad" id="bExpire">⌛ Dejar vencer los 30 días sin instalar</button>
+            </div>
           </ui-tabs-panel>
 
           <ui-tabs-panel value="medicion">
@@ -439,11 +450,15 @@ const NEIGHBORS = [
   {id: "beto", name: "Beto", role: "Pulpería El Sol", amt: 800000},
   {id: "adi", name: "ADI Santa Teresa", role: "Asociación de desarrollo", amt: 1000000},
 ];
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const gKey = () => "G" + Array.from({length: 55}, () => B32[Math.floor(Math.random() * 32)]).join("");
 const COMMITTEE = [
   {id: "marta", name: "Marta", role: "Presidenta ADI"},
   {id: "luis", name: "Luis", role: "Fontanero ASADA"},
   {id: "sofia", name: "Sofía", role: "Maestra de la escuela"},
-];
+].map(c => ({...c, key0: gKey()}));
+const did = k => `did:pkh:stellar:testnet:${k}`;
+const shortDid = k => `did:pkh:stellar:testnet:${k.slice(0, 5)}…${k.slice(-4)}`;
 const THRESHOLD = 2, METER0 = 5000, FRAC = [.3, .67, 1];
 const SCEN = {
   feliz: {perf: 80, cheat: false}, falla: {perf: 15, cheat: false},
@@ -579,12 +594,16 @@ function approve(member, key) {
   if (set.size >= THRESHOLD) return {done: true};
   return {done: false};
 }
+let lastCommittee;
+const refreshCommittee = () => lastCommittee && renderCommittee(...lastCommittee);
 function renderCommittee(box, key, label, onSign, locked = false) {
+  if (box.id === "committee") lastCommittee = [box, key, label, onSign, locked];
   const set = S.approvals[key] || new Set();
   box.innerHTML = COMMITTEE.map(c => `
     <div class="person ${set.has(c.id) ? "on" : ""}" id="${box.id}-${c.id}">
       <div class="av" style="background:var(--sky-soft)">${c.name[0]}</div>
-      <div><div class="nm">${c.name}</div><div class="rl">${c.role}</div></div>
+      <div style="min-width:0"><div class="nm">${c.name}</div><div class="rl">${c.role}</div>
+        <div class="did" title="${did(c.key)}">${shortDid(c.key)}</div><div class="since">vigente desde: ${c.since}</div></div>
       <button class="btn" data-m="${c.id}" ${locked ? "disabled" : ""}>${set.has(c.id) ? "✓ Firmó" : label}</button>
     </div>`).join("");
   box.onclick = e => { const b = e.target.closest("[data-m]"); if (b && !b.disabled) onSign(b.dataset.m); };
@@ -605,7 +624,7 @@ async function signInstall(m) {
     return toast("1 firma. Falta otra: nadie decide solo");
   }
   sigBar(2);
-  renderCommittee($("#committee"), "install", "", () => {}, true);
+  renderCommittee($("#committee"), "install", "No hizo falta", () => {}, true);
   S.advance = Math.floor(S.total * S.advBps / 10000);
   await coins($("#vault"), $("#installerCard"), 4);
   S.paid = S.advance; S.status = "Measuring";
@@ -614,6 +633,24 @@ async function signInstall(m) {
   $("#bExpire").disabled = true;
   paint(); unlock("medicion");
 }
+$("#bRotate").onclick = async () => {
+  const luis = COMMITTEE.find(c => c.id === "luis");
+  const old = luis.key, fresh = gKey();
+  const args = `${old.slice(0, 5)}…, ${fresh.slice(0, 5)}…`;
+  $("#bRotate").disabled = true;
+  toast("Luis ya no tiene su llave: Marta y Sofía firman el cambio");
+  for (const m of ["marta", "sofia"]) {
+    await wait(450);
+    log(`rotate_member(${m}, ${args})`, m === "marta" ? "firma 1/2" : "mayoría → llave rotada, rol conservado");
+  }
+  luis.key = fresh; luis.since = "rotación de hoy";
+  refreshCommittee();
+  const card = $("#committee-luis");
+  if (card && !reduce) card.classList.add("rot");
+  await wait(600);
+  log(`approve_installation(${old.slice(0, 5)}…, 0, ${METER0})`, "Error::NotCommitteeMember", false);
+  toast("La llave vieja ya no puede firmar. Luis sigue en el comité con su llave nueva");
+};
 $("#bExpire").onclick = () => {
   if (S.status !== "Funding") return;
   S.status = "Expired";
@@ -801,6 +838,8 @@ function reset() {
   const sw = $("#cheat"); sw.removeAttribute("disabled");
   try { if (sw.api?.setChecked) sw.api.setChecked(sc.cheat); else sw.checked = sc.cheat; } catch {}
   cheatOn = sc.cheat;
+  COMMITTEE.forEach(c => { c.key = c.key0; c.since = "inicio del comité"; });
+  $("#bRotate").disabled = false;
   renderNeighbors();
   renderCommittee($("#committee"), "install", "Firmar instalación", signInstall);
   sigBar(0);
