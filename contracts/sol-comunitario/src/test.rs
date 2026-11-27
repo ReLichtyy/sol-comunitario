@@ -5,13 +5,14 @@ use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
     token::{StellarAssetClient, TokenClient},
-    vec, Address, Env, String,
+    vec, Address, Env, String, Vec,
 };
 
 struct Setup<'a> {
     env: Env,
     client: SolComunitarioClient<'a>,
     token: TokenClient<'a>,
+    /// La empresa Sol Comunitario (instala y vende los planes).
     installer: Address,
     /// Comité de vecinos: 3 miembros, se necesitan 2 firmas.
     c1: Address,
@@ -55,21 +56,39 @@ fn m(env: &Env, account: &Address, role: &str) -> Member {
     Member { account: account.clone(), role: String::from_str(env, role), since: 0 }
 }
 
-fn new_project_with(s: &Setup, name: &str, kwh: i128, advance_bps: u32) -> u32 {
+fn plan(env: &Env, name: &str, panels: u32, price: i128, kwh: i128) -> Plan {
+    Plan { name: String::from_str(env, name), panels, price, kwh }
+}
+
+/// Planes típicos: kWh prometidos para los 90 días de medición.
+const BASICO: u32 = 0; // 1 panel  · 2 500 · 250 kWh
+const FAMILIAR: u32 = 1; // 2 paneles · 5 000 · 500 kWh
+const COMERCIO: u32 = 2; // 4 paneles · 10 000 · 1 000 kWh
+
+fn default_plans(env: &Env) -> Vec<Plan> {
+    vec![
+        env,
+        plan(env, "Basico", 1, 2_500, 250),
+        plan(env, "Familiar", 2, 5_000, 500),
+        plan(env, "Comercio", 4, 10_000, 1_000),
+    ]
+}
+
+fn new_project_with(s: &Setup, plans: &Vec<Plan>, advance_bps: u32) -> u32 {
     s.client.create_project(
         &s.installer,
         &s.c1,
-        &String::from_str(&s.env, name),
-        &kwh,
+        &String::from_str(&s.env, "Santa Teresa Solar"),
+        plans,
         &advance_bps,
         &30,
         &90,
     )
 }
 
-/// Proyecto típico: 1 000 kWh en 90 días, 30% de adelanto, 30 días para instalar.
+/// Proyecto típico: 3 planes, 30% de adelanto, 30 días para instalar, 90 de medición.
 fn new_project(s: &Setup) -> u32 {
-    new_project_with(s, "Salon comunal de Santa Teresa", 1_000, 3_000)
+    new_project_with(s, &default_plans(&s.env), 3_000)
 }
 
 /// c1 + c2 confirman la instalación con el medidor en `meter_start`.
@@ -94,32 +113,63 @@ fn advance_days(env: &Env, days: u64) {
 fn camino_feliz_80_por_ciento_de_la_energia() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &7_500);
-    s.client.contribute(&s.beto, &id, &2_500);
-    assert_eq!(s.client.get_project(&id).total, 10_000);
+    s.client.subscribe(&s.ana, &id, &FAMILIAR); // 5 000 · 500 kWh
+    s.client.subscribe(&s.beto, &id, &BASICO); // 2 500 · 250 kWh
+    let p = s.client.get_project(&id);
+    assert_eq!((p.total, p.kwh_promised), (7_500, 750));
 
     advance_days(&s.env, 10);
-    // Medidor nuevo marca 5 000. Adelanto del 30% al confirmar.
     install(&s, id, 5_000);
-    assert_eq!(s.token.balance(&s.installer), 3_000);
+    assert_eq!(s.token.balance(&s.installer), 2_250); // 30% de adelanto
 
-    // Lecturas mensuales ABSOLUTAS del medidor: termina en 5 800 => 800 kWh.
-    for meter in [5_250, 5_550, 5_800] {
+    // Lecturas mensuales ABSOLUTAS: termina en 5 600 => 600 kWh (80%).
+    for meter in [5_180, 5_400, 5_600] {
         advance_days(&s.env, 30);
         read(&s, id, meter);
     }
-    assert_eq!(s.client.get_project(&id).kwh_generated, 800);
     assert_eq!(s.client.performance_bps(&id), 8_000);
 
-    advance_days(&s.env, 1 + OBJECTION_DAYS);
-    // Ganó 80% = 8 000; ya recibió 3 000 => paga 5 000.
-    assert_eq!(s.client.settle(&id), 5_000);
-    assert_eq!(s.token.balance(&s.installer), 8_000);
+    // Cada familia recibe energía según su plan.
+    let ana = s.client.get_share(&id, &s.ana);
+    assert_eq!((ana.plan, ana.kwh_promised, ana.kwh_received), (FAMILIAR, 500, 400));
+    assert_eq!(s.client.get_share(&id, &s.beto).kwh_received, 200);
 
-    // Sobran 2 000 => 75% a Ana y 25% a Beto.
-    assert_eq!(s.client.claim_refund(&s.ana, &id), 1_500);
+    advance_days(&s.env, 1 + OBJECTION_DAYS);
+    // Ganó 80% de 7 500 = 6 000; ya recibió 2 250 => paga 3 750.
+    assert_eq!(s.client.settle(&id), 3_750);
+    assert_eq!(s.token.balance(&s.installer), 6_000);
+
+    // Sobran 1 500 => proporcional a lo pagado.
+    assert_eq!(s.client.claim_refund(&s.ana, &id), 1_000);
     assert_eq!(s.client.claim_refund(&s.beto, &id), 500);
     assert_eq!(s.token.balance(&s.client.address), 0);
+}
+
+// ---------------- planes y suscripción ----------------
+
+#[test]
+fn familias_firman_un_plan_y_la_promesa_crece() {
+    let s = setup();
+    let id = new_project(&s);
+    assert_eq!(s.client.get_plans(&id).len(), 3);
+
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
+    assert_eq!(s.client.get_project(&id).kwh_promised, 1_000);
+    assert_eq!(s.client.get_contribution(&id, &s.ana), 10_000);
+    assert_eq!(s.token.balance(&s.ana), 90_000);
+
+    assert_eq!(
+        s.client.try_subscribe(&s.ana, &id, &BASICO),
+        Err(Ok(Error::AlreadySubscribed))
+    );
+    assert_eq!(
+        s.client.try_subscribe(&s.beto, &id, &9),
+        Err(Ok(Error::PlanNotFound))
+    );
+    assert_eq!(
+        s.client.try_get_share(&id, &s.beto),
+        Err(Ok(Error::NotContributor))
+    );
 }
 
 // ---------------- comité 2 de 3 ----------------
@@ -128,7 +178,7 @@ fn camino_feliz_80_por_ciento_de_la_energia() {
 fn una_sola_firma_no_libera_el_adelanto() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &10_000);
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
 
     assert!(!s.client.approve_installation(&s.c1, &id, &0));
     assert_eq!(s.client.get_project(&id).status, Status::Funding);
@@ -143,7 +193,7 @@ fn una_sola_firma_no_libera_el_adelanto() {
 fn nadie_firma_dos_veces() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &BASICO);
     s.client.approve_installation(&s.c1, &id, &0);
     assert_eq!(
         s.client.try_approve_installation(&s.c1, &id, &0),
@@ -155,7 +205,7 @@ fn nadie_firma_dos_veces() {
 fn extranos_no_pueden_firmar() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &BASICO);
     assert_eq!(
         s.client.try_approve_installation(&s.installer, &id, &0),
         Err(Ok(Error::NotCommitteeMember))
@@ -165,7 +215,7 @@ fn extranos_no_pueden_firmar() {
             &s.installer,
             &s.ana,
             &String::from_str(&s.env, "x"),
-            &1_000,
+            &default_plans(&s.env),
             &0,
             &30,
             &90
@@ -178,15 +228,13 @@ fn extranos_no_pueden_firmar() {
 fn lecturas_en_desacuerdo_no_cuentan_hasta_tener_mayoria() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
     install(&s, id, 0);
 
-    // c1 dice 300, c2 dice 250: ninguna lectura tiene mayoría.
     assert!(!s.client.submit_reading(&s.c1, &id, &300));
     assert!(!s.client.submit_reading(&s.c2, &id, &250));
     assert_eq!(s.client.get_project(&id).kwh_generated, 0);
 
-    // c3 confirma 250 => se aplica 250.
     assert!(s.client.submit_reading(&s.c3, &id, &250));
     assert_eq!(s.client.get_project(&id).kwh_generated, 250);
 }
@@ -195,11 +243,10 @@ fn lecturas_en_desacuerdo_no_cuentan_hasta_tener_mayoria() {
 fn el_medidor_nunca_retrocede() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
     install(&s, id, 5_000);
     read(&s, id, 5_400);
 
-    // Reportar el mismo mes dos veces o un valor menor es rechazado.
     assert_eq!(
         s.client.try_submit_reading(&s.c1, &id, &5_400),
         Err(Ok(Error::MeterNotIncreasing))
@@ -217,7 +264,7 @@ fn el_medidor_nunca_retrocede() {
 fn sobre_generar_no_paga_mas_del_100() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &10_000);
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
     install(&s, id, 0);
     read(&s, id, 1_500);
     advance_days(&s.env, 91 + OBJECTION_DAYS);
@@ -228,10 +275,10 @@ fn sobre_generar_no_paga_mas_del_100() {
 }
 
 #[test]
-fn paneles_que_no_generan_instalador_solo_se_queda_el_adelanto() {
+fn paneles_que_no_generan_empresa_solo_se_queda_el_adelanto() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &10_000);
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
     install(&s, id, 0);
     read(&s, id, 100); // 10% < 30% de adelanto
     advance_days(&s.env, 91 + OBJECTION_DAYS);
@@ -241,10 +288,10 @@ fn paneles_que_no_generan_instalador_solo_se_queda_el_adelanto() {
 }
 
 #[test]
-fn nunca_se_instala_vecinos_recuperan_todo() {
+fn nunca_se_instala_familias_recuperan_todo() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &4_000);
+    s.client.subscribe(&s.ana, &id, &FAMILIAR);
 
     assert_eq!(
         s.client.try_claim_refund(&s.ana, &id),
@@ -257,10 +304,10 @@ fn nunca_se_instala_vecinos_recuperan_todo() {
         Err(Ok(Error::InstallDeadlinePassed))
     );
     assert_eq!(
-        s.client.try_contribute(&s.beto, &id, &100),
+        s.client.try_subscribe(&s.beto, &id, &BASICO),
         Err(Ok(Error::InstallDeadlinePassed))
     );
-    assert_eq!(s.client.claim_refund(&s.ana, &id), 4_000);
+    assert_eq!(s.client.claim_refund(&s.ana, &id), 5_000);
     assert_eq!(s.token.balance(&s.ana), 100_000);
 }
 
@@ -270,7 +317,7 @@ fn nunca_se_instala_vecinos_recuperan_todo() {
 fn no_se_liquida_antes_de_tiempo_ni_se_mide_despues() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &BASICO);
     install(&s, id, 0);
 
     advance_days(&s.env, 45);
@@ -290,14 +337,14 @@ fn no_se_liquida_antes_de_tiempo_ni_se_mide_despues() {
 fn no_doble_liquidacion_ni_doble_reembolso() {
     let s = setup();
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
     install(&s, id, 0);
     read(&s, id, 500);
     advance_days(&s.env, 91 + OBJECTION_DAYS);
-    s.client.settle(&id);
+    assert_eq!(s.client.settle(&id), 2_000);
 
     assert_eq!(s.client.try_settle(&id), Err(Ok(Error::NotMeasuring)));
-    assert_eq!(s.client.claim_refund(&s.ana, &id), 500);
+    assert_eq!(s.client.claim_refund(&s.ana, &id), 5_000);
     assert_eq!(
         s.client.try_claim_refund(&s.ana, &id),
         Err(Ok(Error::NothingToClaim))
@@ -305,17 +352,17 @@ fn no_doble_liquidacion_ni_doble_reembolso() {
 }
 
 #[test]
-fn no_se_instala_sin_fondos_ni_se_aporta_despues_de_instalar() {
+fn no_se_instala_sin_familias_ni_se_firma_despues_de_instalar() {
     let s = setup();
     let id = new_project(&s);
     assert_eq!(
         s.client.try_approve_installation(&s.c1, &id, &0),
         Err(Ok(Error::NoFunds))
     );
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &BASICO);
     install(&s, id, 0);
     assert_eq!(
-        s.client.try_contribute(&s.beto, &id, &1_000),
+        s.client.try_subscribe(&s.beto, &id, &BASICO),
         Err(Ok(Error::NotFunding))
     );
 }
@@ -333,33 +380,43 @@ fn lecturas_solo_durante_la_medicion() {
 // ---------------- validaciones ----------------
 
 #[test]
-fn validaciones_de_creacion_y_montos() {
+fn validaciones_de_creacion() {
     let s = setup();
-    let name = String::from_str(&s.env, "Escuela de Nosara");
-    let mk = |kwh: i128, bps: u32, inst: u32| {
+    let name = String::from_str(&s.env, "Nosara Solar");
+    let mk = |plans: &Vec<Plan>, bps: u32, inst: u32| {
         s.client
-            .try_create_project(&s.installer, &s.c1, &name, &kwh, &bps, &inst, &90)
+            .try_create_project(&s.installer, &s.c1, &name, plans, &bps, &inst, &90)
     };
-    assert_eq!(mk(0, 3_000, 30), Err(Ok(Error::InvalidPromise)));
-    assert_eq!(mk(1_000, 6_000, 30), Err(Ok(Error::InvalidAdvance)));
-    assert_eq!(mk(1_000, 3_000, 0), Err(Ok(Error::InvalidDays)));
+    let ok = default_plans(&s.env);
+    assert_eq!(mk(&Vec::new(&s.env), 3_000, 30), Err(Ok(Error::InvalidPlan)));
+    assert_eq!(
+        mk(&vec![&s.env, plan(&s.env, "x", 1, 0, 100)], 3_000, 30),
+        Err(Ok(Error::InvalidPlan))
+    );
+    assert_eq!(
+        mk(&vec![&s.env, plan(&s.env, "x", 0, 100, 100)], 3_000, 30),
+        Err(Ok(Error::InvalidPlan))
+    );
+    let mut six = Vec::new(&s.env);
+    for _ in 0..6 {
+        six.push_back(plan(&s.env, "x", 1, 1, 1));
+    }
+    assert_eq!(mk(&six, 3_000, 30), Err(Ok(Error::InvalidPlan)));
+    assert_eq!(mk(&ok, 6_000, 30), Err(Ok(Error::InvalidAdvance)));
+    assert_eq!(mk(&ok, 3_000, 0), Err(Ok(Error::InvalidDays)));
 
     let long = String::from_str(&s.env, &"x".repeat(MAX_NAME_LEN as usize + 1));
     assert_eq!(
         s.client
-            .try_create_project(&s.installer, &s.c1, &long, &1_000, &0, &30, &90),
+            .try_create_project(&s.installer, &s.c1, &long, &ok, &0, &30, &90),
         Err(Ok(Error::NameTooLong))
     );
 
-    let id = new_project_with(&s, "Escuela de Nosara", 1_000, 0);
     assert_eq!(
-        s.client.try_contribute(&s.ana, &id, &0),
-        Err(Ok(Error::InvalidAmount))
-    );
-    assert_eq!(
-        s.client.try_contribute(&s.ana, &42, &10),
+        s.client.try_subscribe(&s.ana, &42, &BASICO),
         Err(Ok(Error::ProjectNotFound))
     );
+    new_project(&s);
     assert_eq!(s.client.project_count(), 1);
 }
 
@@ -378,7 +435,6 @@ fn comite_invalido_y_doble_inicializacion() {
     let fresh = SolComunitarioClient::new(&env, &env.register(SolComunitario, ()));
     let a = Address::generate(&env);
     let b = Address::generate(&env);
-    // umbral 0, umbral > miembros, miembros repetidos
     assert_eq!(
         fresh.try_initialize(&vec![&env, m(&env, &a, "a"), m(&env, &b, "b")], &0, &a),
         Err(Ok(Error::InvalidCommittee))
@@ -394,7 +450,7 @@ fn comite_invalido_y_doble_inicializacion() {
 }
 
 #[test]
-fn crear_proyecto_requiere_firma_de_instalador_y_miembro() {
+fn crear_proyecto_requiere_firma_de_empresa_y_miembro() {
     let s = setup();
     new_project(&s);
     let auths = s.env.auths();
@@ -406,9 +462,10 @@ fn crear_proyecto_requiere_firma_de_instalador_y_miembro() {
 #[test]
 fn redondeo_nunca_deja_al_contrato_en_negativo() {
     let s = setup();
-    let id = new_project_with(&s, "EBAIS de Pital", 7, 3_333);
-    s.client.contribute(&s.ana, &id, &1_001);
-    s.client.contribute(&s.beto, &id, &333);
+    let plans = vec![&s.env, plan(&s.env, "A", 1, 1_001, 4), plan(&s.env, "B", 1, 333, 3)];
+    let id = new_project_with(&s, &plans, 3_333);
+    s.client.subscribe(&s.ana, &id, &0);
+    s.client.subscribe(&s.beto, &id, &1);
     install(&s, id, 0);
     read(&s, id, 3);
     advance_days(&s.env, 91 + OBJECTION_DAYS);
@@ -425,7 +482,7 @@ fn redondeo_nunca_deja_al_contrato_en_negativo() {
 /// realmente marcaba 600.
 fn inflated_project(s: &Setup) -> u32 {
     let id = new_project(s);
-    s.client.contribute(&s.ana, &id, &10_000);
+    s.client.subscribe(&s.ana, &id, &COMERCIO);
     install(s, id, 0);
     read(s, id, 1_000);
     id
@@ -445,7 +502,7 @@ fn no_se_liquida_durante_la_objecion() {
 }
 
 #[test]
-fn vecino_objeta_y_el_comite_corrige_la_lectura() {
+fn familia_objeta_y_el_comite_corrige_la_lectura() {
     let s = setup();
     let id = inflated_project(&s);
     advance_days(&s.env, 91);
@@ -453,24 +510,21 @@ fn vecino_objeta_y_el_comite_corrige_la_lectura() {
     s.client.dispute(&s.ana, &id);
     assert_eq!(s.client.get_project(&id).status, Status::Disputed);
 
-    // Aunque pase el plazo, un proyecto en disputa no se liquida solo.
     advance_days(&s.env, 30);
     assert_eq!(s.client.try_settle(&id), Err(Ok(Error::InDispute)));
 
-    // Mayoría del comité fija la lectura real (600) y se liquida en el acto.
     assert!(!s.client.resolve_dispute(&s.c1, &id, &600));
     assert!(s.client.resolve_dispute(&s.c3, &id, &600));
 
     let p = s.client.get_project(&id);
     assert_eq!(p.status, Status::Settled);
     assert_eq!(p.kwh_generated, 600);
-    // 60% de 10 000 = 6 000 (3 000 adelanto + 3 000 final)
     assert_eq!(s.token.balance(&s.installer), 6_000);
     assert_eq!(s.client.claim_refund(&s.ana, &id), 4_000);
 }
 
 #[test]
-fn solo_quien_aporto_puede_objetar() {
+fn solo_quien_firmo_un_plan_puede_objetar() {
     let s = setup();
     let id = inflated_project(&s);
     advance_days(&s.env, 91);
@@ -484,12 +538,10 @@ fn solo_quien_aporto_puede_objetar() {
 fn objecion_solo_dentro_del_plazo() {
     let s = setup();
     let id = inflated_project(&s);
-    // Todavía midiendo.
     assert_eq!(
         s.client.try_dispute(&s.ana, &id),
         Err(Ok(Error::NotDisputable))
     );
-    // Ya pasó la ventana de objeción.
     advance_days(&s.env, 91 + OBJECTION_DAYS);
     assert_eq!(
         s.client.try_dispute(&s.ana, &id),
@@ -537,20 +589,17 @@ fn luis_pierde_el_celular_y_rota_su_llave() {
     let luis_nuevo = Address::generate(&s.env);
     advance_days(&s.env, 5);
 
-    // Luis (c2) ya no tiene su llave: firman Marta (c1) y Sofía (c3).
     assert!(!s.client.rotate_member(&s.c1, &s.c2, &luis_nuevo));
     assert!(s.client.rotate_member(&s.c3, &s.c2, &luis_nuevo));
 
-    // Mismo rol, nueva llave, nueva fecha de vigencia.
     let cfg = s.client.get_config();
     let luis = cfg.committee.iter().find(|m| m.account == luis_nuevo).unwrap();
     assert_eq!(luis.role, String::from_str(&s.env, "Fontanero ASADA"));
     assert_eq!(luis.since, 5 * DAY);
     assert!(!s.client.is_member(&s.c2));
 
-    // La llave vieja ya no firma; la nueva sí.
     let id = new_project(&s);
-    s.client.contribute(&s.ana, &id, &1_000);
+    s.client.subscribe(&s.ana, &id, &BASICO);
     assert_eq!(
         s.client.try_approve_installation(&s.c2, &id, &0),
         Err(Ok(Error::NotCommitteeMember))
@@ -563,17 +612,14 @@ fn luis_pierde_el_celular_y_rota_su_llave() {
 fn rotar_valida_miembros() {
     let s = setup();
     let x = Address::generate(&s.env);
-    // `old` debe ser miembro.
     assert_eq!(
         s.client.try_rotate_member(&s.c1, &s.ana, &x),
         Err(Ok(Error::NotCommitteeMember))
     );
-    // `new` no puede ser alguien que ya está en el comité.
     assert_eq!(
         s.client.try_rotate_member(&s.c1, &s.c2, &s.c3),
         Err(Ok(Error::InvalidCommittee))
     );
-    // Un extraño no puede firmar la rotación.
     assert_eq!(
         s.client.try_rotate_member(&s.ana, &s.c2, &x),
         Err(Ok(Error::NotCommitteeMember))
@@ -588,7 +634,6 @@ fn revocar_miembro_con_mayoria_sin_romper_el_umbral() {
     assert_eq!(s.client.get_config().committee.len(), 2);
     assert!(!s.client.is_member(&s.c3));
 
-    // Quedan 2 con umbral 2: revocar otro dejaría el comité inservible.
     assert_eq!(
         s.client.try_revoke_member(&s.c1, &s.c2),
         Err(Ok(Error::InvalidCommittee))

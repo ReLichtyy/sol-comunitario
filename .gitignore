@@ -3,3 +3,4 @@ target/
 .stellar/
 *.wasm
 test_snapshots/
+node_modules/

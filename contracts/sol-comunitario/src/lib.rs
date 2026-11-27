@@ -39,6 +39,8 @@ pub const MAX_ADVANCE_BPS: u32 = 5_000;
 pub const BPS: i128 = 10_000;
 /// Largo máximo del nombre del proyecto (bytes).
 pub const MAX_NAME_LEN: u32 = 64;
+/// Máximo de planes que la empresa puede ofrecer por proyecto.
+pub const MAX_PLANS: u32 = 5;
 /// Días, después de la medición, en que un vecino puede objetar las lecturas.
 pub const OBJECTION_DAYS: u64 = 7;
 
@@ -53,7 +55,7 @@ pub enum Error {
     NotInitialized = 2,
     ProjectNotFound = 3,
     InvalidAmount = 4,
-    InvalidPromise = 5,
+    InvalidPlan = 5,
     InvalidAdvance = 6,
     InvalidDays = 7,
     NotFunding = 8,
@@ -74,6 +76,8 @@ pub enum Error {
     NotDisputable = 23,
     NotContributor = 24,
     NotDisputed = 25,
+    PlanNotFound = 26,
+    AlreadySubscribed = 27,
 }
 
 #[contracttype]
@@ -106,6 +110,39 @@ pub struct Member {
     pub since: u64,
 }
 
+/// Plan que la empresa ofrece a las familias (ej. "Familiar · 2 paneles").
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Plan {
+    pub name: String,
+    pub panels: u32,
+    /// Precio que paga la familia al firmar.
+    pub price: i128,
+    /// kWh que la empresa promete entregar a esta familia en la ventana de medición.
+    pub kwh: i128,
+}
+
+/// Lo que firmó una familia.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Subscription {
+    pub plan: u32,
+    pub paid: i128,
+    pub kwh: i128,
+}
+
+/// La parte de energía de una familia en un proyecto.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Share {
+    pub plan: u32,
+    pub paid: i128,
+    /// kWh prometidos por su plan.
+    pub kwh_promised: i128,
+    /// Su parte de lo generado: generado × (sus kWh / kWh prometidos del proyecto).
+    pub kwh_received: i128,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
@@ -120,7 +157,7 @@ pub struct Project {
     pub installer: Address,
     /// Ej. "Salón comunal de Santa Teresa".
     pub name: String,
-    /// kWh que el instalador promete generar en la ventana de medición.
+    /// kWh prometidos: suma de los planes firmados por las familias.
     pub kwh_promised: i128,
     /// Adelanto al instalar, en puntos base (3000 = 30%).
     pub advance_bps: u32,
@@ -166,6 +203,8 @@ enum DataKey {
     Config,
     ProjectCount,
     Project(u32),
+    Plans(u32),
+    /// Suscripción de una familia a un proyecto.
     Contribution(u32, Address),
     Approvals(u32, Action),
 }
@@ -262,13 +301,14 @@ impl SolComunitario {
             .unwrap_or(false)
     }
 
-    /// El instalador y un miembro del comité acuerdan un proyecto. Devuelve su id.
+    /// La empresa (instalador) publica un proyecto con sus planes; un miembro
+    /// del comité de vecinos co-firma. Devuelve su id.
     pub fn create_project(
         env: Env,
         installer: Address,
         member: Address,
         name: String,
-        kwh_promised: i128,
+        plans: Vec<Plan>,
         advance_bps: u32,
         install_days: u32,
         measure_days: u32,
@@ -280,8 +320,13 @@ impl SolComunitario {
         if name.len() > MAX_NAME_LEN {
             return Err(Error::NameTooLong);
         }
-        if kwh_promised <= 0 {
-            return Err(Error::InvalidPromise);
+        if plans.is_empty() || plans.len() > MAX_PLANS {
+            return Err(Error::InvalidPlan);
+        }
+        for pl in plans.iter() {
+            if pl.panels == 0 || pl.price <= 0 || pl.kwh <= 0 || pl.name.len() > MAX_NAME_LEN {
+                return Err(Error::InvalidPlan);
+            }
         }
         if advance_bps > MAX_ADVANCE_BPS {
             return Err(Error::InvalidAdvance);
@@ -293,7 +338,7 @@ impl SolComunitario {
         let project = Project {
             installer: installer.clone(),
             name,
-            kwh_promised,
+            kwh_promised: 0,
             advance_bps,
             install_deadline: env.ledger().timestamp() + install_days as u64 * DAY,
             measure_secs: measure_days as u64 * DAY,
@@ -308,37 +353,39 @@ impl SolComunitario {
         let id = Self::project_count(env.clone());
         env.storage().instance().set(&DataKey::ProjectCount, &(id + 1));
         Self::save(&env, id, &project);
+        Self::put(&env, &DataKey::Plans(id), &plans);
 
         env.events()
-            .publish((symbol_short!("project"), id), (installer, kwh_promised));
+            .publish((symbol_short!("project"), id), (installer, plans.len()));
         Ok(id)
     }
 
-    /// Un vecino aporta al proyecto. Los fondos quedan en el contrato.
-    pub fn contribute(env: Env, neighbor: Address, id: u32, amount: i128) -> Result<(), Error> {
+    /// Una familia firma un plan: paga su precio (queda bloqueado en el
+    /// contrato) y la promesa de energía del proyecto crece con su plan.
+    pub fn subscribe(env: Env, neighbor: Address, id: u32, plan: u32) -> Result<(), Error> {
         neighbor.require_auth();
-        if amount <= 0 {
-            return Err(Error::InvalidAmount);
-        }
         let mut p = Self::load(&env, id)?;
         Self::require_funding(&env, &p)?;
+        let chosen = Self::plans(&env, id)?.get(plan).ok_or(Error::PlanNotFound)?;
+        let key = DataKey::Contribution(id, neighbor.clone());
+        if env.storage().persistent().has(&key) {
+            return Err(Error::AlreadySubscribed);
+        }
 
         let cfg = Self::config(&env)?;
         token::Client::new(&env, &cfg.token).transfer(
             &neighbor,
             &env.current_contract_address(),
-            &amount,
+            &chosen.price,
         );
+        Self::put(&env, &key, &Subscription { plan, paid: chosen.price, kwh: chosen.kwh });
 
-        let key = DataKey::Contribution(id, neighbor.clone());
-        let prev = Self::contribution(&env, &key);
-        Self::put(&env, &key, &(prev + amount));
-
-        p.total += amount;
+        p.total += chosen.price;
+        p.kwh_promised += chosen.kwh;
         Self::save(&env, id, &p);
 
         env.events()
-            .publish((symbol_short!("aporte"), id), (neighbor, amount));
+            .publish((symbol_short!("firma"), id), (neighbor, plan));
         Ok(())
     }
 
@@ -497,6 +544,26 @@ impl SolComunitario {
         Self::load(&env, id)
     }
 
+    pub fn get_plans(env: Env, id: u32) -> Result<Vec<Plan>, Error> {
+        Self::plans(&env, id)
+    }
+
+    /// La parte de energía que le toca a una familia.
+    pub fn get_share(env: Env, id: u32, neighbor: Address) -> Result<Share, Error> {
+        let p = Self::load(&env, id)?;
+        let sub: Subscription = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Contribution(id, neighbor))
+            .ok_or(Error::NotContributor)?;
+        Ok(Share {
+            plan: sub.plan,
+            paid: sub.paid,
+            kwh_promised: sub.kwh,
+            kwh_received: p.kwh_generated * sub.kwh / p.kwh_promised,
+        })
+    }
+
     pub fn get_contribution(env: Env, id: u32, neighbor: Address) -> i128 {
         Self::contribution(&env, &DataKey::Contribution(id, neighbor))
     }
@@ -511,6 +578,9 @@ impl SolComunitario {
     /// Desempeño en puntos base: generado / prometido (tope 10000 = 100%).
     pub fn performance_bps(env: Env, id: u32) -> Result<u32, Error> {
         let p = Self::load(&env, id)?;
+        if p.kwh_promised == 0 {
+            return Ok(0);
+        }
         Ok((p.kwh_generated.min(p.kwh_promised) * BPS / p.kwh_promised) as u32)
     }
 
@@ -620,8 +690,20 @@ impl SolComunitario {
             .ok_or(Error::NotInitialized)
     }
 
+    /// Lo que pagó una familia (0 si no firmó).
     fn contribution(env: &Env, key: &DataKey) -> i128 {
-        env.storage().persistent().get(key).unwrap_or(0)
+        env.storage()
+            .persistent()
+            .get::<_, Subscription>(key)
+            .map(|s| s.paid)
+            .unwrap_or(0)
+    }
+
+    fn plans(env: &Env, id: u32) -> Result<Vec<Plan>, Error> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Plans(id))
+            .ok_or(Error::ProjectNotFound)
     }
 
     fn load(env: &Env, id: u32) -> Result<Project, Error> {
