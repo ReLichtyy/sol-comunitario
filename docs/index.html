@@ -15,12 +15,12 @@
   --bg:#f8f4ea; --paper:#fffdf8; --ink:#1c1912; --muted:#6a6252; --line:#e7ddc8;
   --sun:#e8960c; --sun-2:#f6b73c; --sun-soft:#fdecc6; --leaf:#2c7a4b; --leaf-soft:#dcefe2;
   --sky:#2f5fc4; --sky-soft:#e2e9fb; --bad:#b9412b; --bad-soft:#f8e1da;
-  --r:16px; --shadow:0 1px 0 rgba(28,25,18,.04),0 8px 24px -12px rgba(28,25,18,.18);
+  --r:16px; --wall:#fff3dc; --roof:#c4583a; --ground:#efe2c4; --win-off:#d9cdb3; --shadow:0 1px 0 rgba(28,25,18,.04),0 8px 24px -12px rgba(28,25,18,.18);
 }
 @media (prefers-color-scheme: dark){
   :root{ --bg:#12110d; --paper:#1b1914; --ink:#f2ead8; --muted:#a69d89; --line:#332f25;
     --sun:#f4a82a; --sun-2:#f8c35a; --sun-soft:#3a2e15; --leaf:#5cc086; --leaf-soft:#18301f;
-    --sky:#86a5f2; --sky-soft:#1b2440; --bad:#ef8064; --bad-soft:#3a1d16;
+    --sky:#86a5f2; --sky-soft:#1b2440; --bad:#ef8064; --bad-soft:#3a1d16; --wall:#2e2a21; --roof:#a8492f; --ground:#211e17; --win-off:#3b3628;
     --shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.6); }
 }
 *{box-sizing:border-box}
@@ -48,16 +48,45 @@ button{font:inherit;color:inherit}
 .hero p{font-size:19px;color:var(--muted);max-width:560px;margin:0 0 24px}
 .goal{display:flex;gap:14px;align-items:flex-start;background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);max-width:560px}
 .goal b{display:block}
-.goal .ico{flex:none;width:36px;height:36px;border-radius:10px;background:var(--sun-soft);display:grid;place-items:center;font-size:18px}
-.sun-art{position:relative;aspect-ratio:1;max-width:380px;width:100%;justify-self:center}
-.sun-art .rays{position:absolute;inset:0;animation:spin 60s linear infinite}
-.sun-art .core{position:absolute;inset:27%;border-radius:50%;background:radial-gradient(circle at 35% 35%,var(--sun-2),var(--sun));box-shadow:0 0 80px 10px color-mix(in srgb,var(--sun) 35%,transparent);animation:pulse 5s ease-in-out infinite}
-.sun-art .panel{position:absolute;left:8%;right:8%;bottom:4%;height:24%;display:grid;grid-template-columns:repeat(6,1fr);gap:4px;transform:perspective(500px) rotateX(38deg)}
-.sun-art .panel i{background:linear-gradient(160deg,#3d5fb8,#1d3170);border-radius:3px;position:relative;overflow:hidden}
-.sun-art .panel i::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-120%);animation:shine 4s ease-in-out infinite;animation-delay:calc(var(--d) * .12s)}
+.goal .ico{flex:none;width:40px;height:40px;border-radius:12px;background:var(--sun-soft);color:var(--sun);display:grid;place-items:center}
+.ic{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.trust{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:22px;color:var(--muted);font-size:14px}
+.trust span{display:inline-flex;align-items:center;gap:8px}
+.trust .ic{width:18px;height:18px;color:var(--sun)}
+.hero-art{position:relative;width:100%;max-width:520px;justify-self:center}
+.hero-art svg.scene{width:100%;height:auto;display:block;overflow:visible}
+.scene .rays{transform-origin:360px 92px;animation:spin 80s linear infinite}
+.scene .glow{transform-origin:360px 92px;animation:breathe 5s ease-in-out infinite}
+.scene .beam{stroke:var(--sun);stroke-width:2;stroke-dasharray:4 10;fill:none;opacity:.7;animation:flow 1.6s linear infinite}
+.scene .beam:nth-of-type(2){animation-delay:-.5s}.scene .beam:nth-of-type(3){animation-delay:-1s}
+.scene .cell{fill:url(#panelGrad)}
+.scene .shine{fill:#fff;opacity:0;animation:glint 5s ease-in-out infinite}
+.scene .win{fill:var(--win-off);animation:lightup 6s ease-in-out infinite}
+.scene .wall{fill:var(--wall)} .scene .roof{fill:var(--roof)} .scene .door{fill:var(--roof);opacity:.75}
+.scene .ground{fill:url(#groundGrad)}
+.chip-f{position:absolute;display:flex;gap:10px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:0 12px 30px -14px rgba(0,0,0,.45);font-size:13px;line-height:1.25;animation:float 6s ease-in-out infinite}
+.chip-f b{display:block;font:700 16px "JetBrains Mono",monospace;color:var(--ink)}
+.chip-f span{color:var(--muted)}
+.chip-f .ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+.chip-kwh{top:4%;left:-2%}.chip-kwh .ico{background:var(--sun-soft);color:var(--sun)}
+.chip-esc{bottom:-1%;left:0;animation-delay:-2s}.chip-esc .ico{background:var(--sky-soft);color:var(--sky)}
+.chip-sig{bottom:-1%;right:0;animation-delay:-4s}.chip-sig .ico{background:var(--leaf-soft);color:var(--leaf)}
+.sigdots{display:flex;gap:4px;margin-top:4px}.sigdots i{width:16px;height:5px;border-radius:3px;background:var(--line)}
+.sigdots i.on{background:var(--leaf);animation:sigOn .6s ease both}
+.sigdots i.on:nth-child(2){animation-delay:.5s}
+@media (max-width:560px){.chip-f{transform:scale(.88)}.chip-kwh{left:0}.chip-sig{right:0}}
+.hero .in-1,.hero .in-2,.hero .in-3,.hero .in-4,.hero .in-5{opacity:0;animation:rise .8s cubic-bezier(.2,.8,.2,1) forwards}
+.hero .in-2{animation-delay:.08s}.hero .in-3{animation-delay:.16s}.hero .in-4{animation-delay:.24s}.hero .in-5{animation-delay:.32s}
+.hero-art{opacity:0;animation:artIn 1s .15s cubic-bezier(.2,.8,.2,1) forwards}
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes pulse{50%{transform:scale(1.04)}}
-@keyframes shine{0%,60%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+@keyframes breathe{50%{transform:scale(1.06);opacity:.85}}
+@keyframes flow{to{stroke-dashoffset:-28}}
+@keyframes glint{0%,70%,100%{opacity:0}78%{opacity:.55}}
+@keyframes lightup{0%,30%{fill:var(--win-off)}45%,85%{fill:var(--sun-2)}100%{fill:var(--win-off)}}
+@keyframes float{50%{transform:translateY(-8px)}}
+@keyframes sigOn{from{background:var(--line)}}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes artIn{from{opacity:0;transform:scale(.96) translateY(10px)}to{opacity:1;transform:none}}
 
 section.block{padding:40px 0}
 .sec-head{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:22px;flex-wrap:wrap}
@@ -234,25 +263,36 @@ footer a{color:var(--sky)}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
   .reveal{opacity:1;transform:none}
+  .hero .in-1,.hero .in-2,.hero .in-3,.hero .in-4,.hero .in-5,.hero-art{opacity:1}
 }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+</svg>
 <div class="wrap">
   <header class="hero">
     <div>
-      <div class="kicker">Contrato inteligente · Stellar Soroban · Costa Rica</div>
-      <h1>Sol <em>Comunitario</em></h1>
-      <p><b>Sol Comunitario</b> llega a tu comunidad con planes de energía solar. Cada familia ve cuánto ahorraría, elige un plan y lo firma. La plata queda en un contrato inteligente y la empresa cobra <b>solo por la energía que realmente entrega</b>.</p>
-      <div class="goal">
-        <div class="ico" aria-hidden="true">🎯</div>
+      <div class="kicker in-1">Contrato inteligente · Stellar Soroban · Costa Rica</div>
+      <h1 class="in-2">Sol <em>Comunitario</em></h1>
+      <p class="in-3"><b>Sol Comunitario</b> llega a tu comunidad con planes de energía solar. Cada familia ve cuánto ahorraría, elige un plan y lo firma. La plata queda en un contrato inteligente y la empresa cobra <b>solo por la energía que realmente entrega</b>.</p>
+      <div class="goal in-4">
+        <div class="ico" aria-hidden="true"><svg class="ic"><use href="#i-target"/></svg></div>
         <div><b>El objetivo</b>Que las familias accedan a energía solar sin arriesgar su plata: pagan por resultados, la comunidad verifica las lecturas y lo que no se entregó vuelve a cada familia.</div>
       </div>
-      <div class="actions">
-        <a class="btn primary" href="#simulador">Probar el flujo completo →</a>
+      <div class="actions in-5">
+        <a class="btn primary" href="#simulador">Probar el flujo completo <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
         <a class="btn ghost" href="#en-vivo"><span class="dotlive"></span>Ver el contrato en vivo</a>
         <ui-dialog>
-          <ui-dialog-trigger><button class="btn ghost" type="button">¿Qué es un escrow?</button></ui-dialog-trigger>
+          <ui-dialog-trigger><button class="btn ghost" type="button"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>¿Qué es un escrow?</button></ui-dialog-trigger>
           <ui-dialog-backdrop hidden></ui-dialog-backdrop>
           <ui-dialog-content hidden>
             <ui-dialog-title>Escrow = una caja fuerte con reglas</ui-dialog-title>
@@ -268,11 +308,48 @@ footer a{color:var(--sky)}
           </ui-dialog-content>
         </ui-dialog>
       </div>
+      <div class="trust in-5">
+        <span><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Comité vecinal 2 de 3</span>
+        <span><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg>Pago por kWh entregado</span>
+        <span><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>7 días para objetar</span>
+      </div>
     </div>
-    <div class="sun-art" aria-hidden="true">
-      <svg class="rays" viewBox="0 0 200 200"><g stroke="var(--sun)" stroke-width="3" stroke-linecap="round" opacity=".55" id="rays"></g></svg>
-      <div class="core"></div>
-      <div class="panel" id="panelArt"></div>
+    <div class="hero-art" aria-hidden="true">
+      <svg class="scene" viewBox="0 0 480 400">
+        <defs>
+          <radialGradient id="sunGlow"><stop offset="0" style="stop-color:var(--sun-2)" stop-opacity=".55"/><stop offset="1" style="stop-color:var(--sun)" stop-opacity="0"/></radialGradient>
+          <radialGradient id="sunCore" cx=".35" cy=".35"><stop offset="0" style="stop-color:var(--sun-2)"/><stop offset="1" style="stop-color:var(--sun)"/></radialGradient>
+          <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ground)"/><stop offset="1" style="stop-color:var(--ground)" stop-opacity="0"/></linearGradient>
+          <linearGradient id="panelGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a6fd0"/><stop offset="1" stop-color="#1d3170"/></linearGradient>
+        </defs>
+        <circle class="glow" cx="360" cy="92" r="96" fill="url(#sunGlow)"/>
+        <g class="rays" style="stroke:var(--sun)" stroke-width="4" stroke-linecap="round" opacity=".6" id="heroRays"></g>
+        <circle cx="360" cy="92" r="44" fill="url(#sunCore)"/>
+        <path class="beam" d="M332 122 Q 220 150 92 236"/>
+        <path class="beam" d="M340 130 Q 290 160 248 210"/>
+        <path class="beam" d="M372 134 Q 395 190 400 246"/>
+        <path class="ground" d="M-20 338 Q 120 302 240 320 T 500 312 L500 380 Q 240 396 -20 380Z"/>
+        <rect class="wall" x="40" y="264" width="110" height="70" rx="3"/>
+        <polygon class="roof" points="30,266 95,214 160,266"/>
+        <g id="panelA" transform="translate(47 256) rotate(-38.7)"></g>
+        <rect class="win" x="54" y="282" width="24" height="20" rx="2"/>
+        <rect class="door" x="104" y="290" width="22" height="44" rx="2"/>
+        <rect class="wall" x="190" y="242" width="140" height="84" rx="3"/>
+        <polygon class="roof" points="180,244 260,190 340,244"/>
+        <g id="panelB" transform="translate(194 236) rotate(-34)"></g>
+        <rect class="door" x="248" y="282" width="26" height="44" rx="2"/>
+        <rect class="win" x="204" y="264" width="30" height="22" rx="2" style="animation-delay:-1.2s"/>
+        <rect class="win" x="288" y="264" width="30" height="22" rx="2" style="animation-delay:-.6s"/>
+        <rect x="222" y="248" width="76" height="12" rx="3" style="fill:var(--sun)"/>
+        <rect class="wall" x="362" y="272" width="88" height="58" rx="3"/>
+        <polygon class="roof" points="352,274 406,232 460,274"/>
+        <g id="panelC" transform="translate(364 266) rotate(-37.9)"></g>
+        <rect class="win" x="376" y="288" width="22" height="18" rx="2" style="animation-delay:-2.4s"/>
+        <rect class="door" x="414" y="294" width="18" height="36" rx="2"/>
+      </svg>
+      <div class="chip-f chip-kwh"><div class="ico"><svg class="ic"><use href="#i-bolt"/></svg></div><div><b><span id="heroKwh" style="color:inherit">0</span> kWh</b><span>entregados y verificados</span></div></div>
+      <div class="chip-f chip-sig"><div class="ico"><svg class="ic"><use href="#i-shield"/></svg></div><div><b>2 de 3</b><span>firmas del comité</span><div class="sigdots"><i class="on"></i><i class="on"></i><i></i></div></div></div>
+      <div class="chip-f chip-esc"><div class="ico"><svg class="ic"><use href="#i-lock"/></svg></div><div><b>₡2 000 000</b><span>en escrow · Stellar</span></div></div>
     </div>
   </header>
 
@@ -490,11 +567,29 @@ const fmt = n => "₡" + Math.floor(n).toLocaleString("es-CR");
 const fmtN = n => Math.floor(n).toLocaleString("es-CR");
 const wait = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
 
-$("#rays").innerHTML = Array.from({length: 24}, (_, i) => {
-  const a = i * 15 * Math.PI / 180, r1 = 70, r2 = i % 2 ? 86 : 96;
-  return `<line x1="${100 + r1 * Math.cos(a)}" y1="${100 + r1 * Math.sin(a)}" x2="${100 + r2 * Math.cos(a)}" y2="${100 + r2 * Math.sin(a)}"/>`;
+$("#heroRays").innerHTML = Array.from({length: 12}, (_, i) => {
+  const a = i * 30 * Math.PI / 180, r1 = 58, r2 = 74;
+  return `<line x1="${360 + r1 * Math.cos(a)}" y1="${92 + r1 * Math.sin(a)}" x2="${360 + r2 * Math.cos(a)}" y2="${92 + r2 * Math.sin(a)}"/>`;
 }).join("");
-$("#panelArt").innerHTML = Array.from({length: 12}, (_, i) => `<i style="--d:${i}"></i>`).join("");
+const panelSvg = (w, n) => {
+  const cw = (w - (n - 1) * 3) / n;
+  return Array.from({length: n}, (_, i) =>
+    `<rect class="cell" x="${i * (cw + 3)}" y="1" width="${cw}" height="12" rx="1.5"/><rect class="shine" x="${i * (cw + 3)}" y="1" width="${cw}" height="12" rx="1.5" style="animation-delay:${(i * .15).toFixed(2)}s"/>`).join("");
+};
+$("#panelA").innerHTML = panelSvg(64, 3);
+$("#panelB").innerHTML = panelSvg(84, 4);
+$("#panelC").innerHTML = panelSvg(56, 3);
+(() => {
+  const el = $("#heroKwh"), end = 1600;
+  if (reduce) { el.textContent = fmtN(end); return; }
+  const t0 = performance.now() + 500;
+  const step = now => {
+    const k = Math.max(0, Math.min(1, (now - t0) / 2200)), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmtN(end * e);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+})();
 const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add("in")), {threshold: .15});
 $$(".reveal").forEach(el => io.observe(el));
 
