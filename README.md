@@ -1,85 +1,87 @@
 # ☀️ Sol Comunitario
 
-**Paneles solares para la comunidad, pagados por la energía que realmente generan.**
+**Energía solar por suscripción para comunidades de Costa Rica, pagada por la energía que realmente llega.**
 Un contrato inteligente en **Stellar (Soroban)** hecho para el reto de la semana 2 del *Pura Vida Bootcamp* (Oppia Climb).
 
-🔗 **Simulador interactivo:** https://relichtyy.github.io/sol-comunitario/
+🌞 **Página + simulador:** https://relichtyy.github.io/sol-comunitario/
+⛓️ **Contrato en vivo (testnet):** [`CCYWNAGKTLO7Y5M57EYGUJK35AVWPCVBMSX4GAEOEFFO66QILGISZKNM`](https://stellar.expert/explorer/testnet/contract/CCYWNAGKTLO7Y5M57EYGUJK35AVWPCVBMSX4GAEOEFFO66QILGISZKNM)
 
 ---
 
 ## 1. El problema (en una frase)
 
-> En un pueblo de Costa Rica, los vecinos juntan plata para poner paneles solares en el salón comunal, **pero no tienen forma de asegurarse de que el instalador cumpla lo que prometió.**
+> Una empresa ofrece paneles solares a las familias de un pueblo, pero las familias tienen que **pagar por adelantado y confiar** en que la energía prometida va a llegar.
 
 ### La historia
 
-En Santa Teresa, en Pital o en cualquier comunidad rural, el salón comunal, la escuela o la bomba de la ASADA pagan recibos de luz altos. Los vecinos hacen rifas y turnos para juntar ₡3 000 000 y contratar a un instalador de paneles.
+**Sol Comunitario S.A.** llega a Santa Teresa con planes de energía solar: *Básico* (1 panel), *Familiar* (2) y *Comercio* (4). A cada familia le muestra **cuánto ahorraría** en su recibo de luz. Doña Ana (soda), Beto (pulpería) y la familia Mora quieren firmar. Pero:
 
-El instalador promete *"estos paneles van a generar 1 000 kWh en 3 meses"*. Pero:
-
-- 💸 **Se paga todo por adelantado.** Si los paneles rinden la mitad, la plata ya se fue.
-- 🤷 **Nadie mide.** No hay un registro claro y compartido de cuánto generan.
-- 🧾 **Desconfianza.** ¿Quién guarda la plata? ¿El tesorero? ¿Y si se la gasta?
+- 💸 **Pagan antes de ver un solo kWh.** Si los paneles rinden la mitad, la plata ya se fue.
+- 🤷 **¿Quién mide?** Si la empresa reporta su propia energía, ¿quién le cree?
+- 🧾 **¿Y si nunca instalan?** Recuperar la plata es un pleito.
 
 ### Por qué lo elegí
 
-Costa Rica ya tiene la mayor parte de su electricidad de fuentes renovables, y la generación distribuida (paneles en techos) está creciendo. Pero **los proyectos comunitarios todavía se manejan con confianza y cuadernos**. Un contrato inteligente resuelve justo la parte difícil: **guardar la plata de forma neutral y pagar solo por resultados.** Además es un problema pequeño y concreto: un proyecto, un instalador, unos cuantos vecinos.
+La generación solar distribuida está creciendo en Costa Rica, pero contratarla sigue siendo un acto de fe. Un contrato inteligente resuelve justo esa parte: **guarda la plata de forma neutral, paga solo por resultados y devuelve lo que no se cumplió**. Es un problema pequeño y concreto: una empresa, unos planes, unas cuantas familias y un comité de vecinos.
 
 ---
 
 ## 2. La solución
 
-El dinero **no lo guarda nadie**: lo guarda el contrato. Y se paga **en proporción a la energía generada**.
+El dinero **no lo guarda la empresa**: lo guarda el contrato. La empresa cobra **en proporción a la energía entregada**, y la comunidad, no la empresa, verifica las lecturas.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Funding: create_project (instalador + miembro del comité)
-    Funding --> Funding: contribute (vecinos aportan)
-    Funding --> Measuring: approve_installation x2 de 3 ⇒ adelanto al instalador
+    [*] --> Funding: create_project (empresa publica planes + co-firma del comité)
+    Funding --> Funding: subscribe (cada familia firma un plan y paga)
+    Funding --> Measuring: approve_installation x2 de 3 ⇒ adelanto a la empresa
     Funding --> Expired: pasa el plazo sin instalar
-    Expired --> [*]: claim_refund ⇒ 100% a cada vecino
+    Expired --> [*]: claim_refund ⇒ 100% a cada familia
     Measuring --> Measuring: submit_reading x2 de 3 (lectura absoluta del medidor)
     Measuring --> Objection: terminan los 90 días de medición
-    Objection --> Disputed: dispute (un vecino que aportó objeta)
+    Objection --> Disputed: dispute (una familia objeta)
     Disputed --> Settled: resolve_dispute x2 de 3 (lectura real) ⇒ liquida
-    Objection --> Settled: pasan 7 días sin objeción ⇒ settle (lo llama cualquiera)
-    Settled --> [*]: claim_refund ⇒ sobrante proporcional
+    Objection --> Settled: 7 días sin objeción ⇒ settle (lo llama cualquiera)
+    Settled --> [*]: claim_refund ⇒ cada familia recupera lo no entregado
 ```
 
 ### Los actores
 
 | Actor | Qué hace |
 |---|---|
-| 🧑‍🔧 **Instalador** | Propone el proyecto, instala los paneles y cobra según los resultados. |
-| 👥 **Comité de vecinos** (ej. 3 miembros, se necesitan 2 firmas) | Confirma la instalación y firma las lecturas del medidor. Ninguna persona sola puede mover la plata. |
-| 🏡 **Vecinos** | Aportan dinero y recuperan lo que el instalador no se ganó. |
+| 🏢 **Sol Comunitario S.A.** (la empresa) | Publica los planes, instala los paneles y cobra según la energía entregada. |
+| 🏡 **Familias** | Eligen un plan, firman y pagan. Reciben su parte de la energía y del ahorro. |
+| 👥 **Comité de vecinos** (ADI/ASADA, 3 miembros, 2 firmas) | Confirma la instalación y firma las lecturas del medidor. La empresa **no** reporta su propia energía. |
 
-### La fórmula (lo más importante)
+### Las fórmulas
 
 ```
-ganado       = total × min(kWh generados, kWh prometidos) / kWh prometidos
-pago final   = max(ganado − adelanto, 0)
-reembolso    = aporte del vecino × (total − pagado al instalador) / total
+promesa del proyecto = suma de los kWh de los planes firmados
+ganado por la empresa = total × min(generado, prometido) / prometido
+pago final            = max(ganado − adelanto, 0)
+energía de la familia = generado × (kWh de su plan / promesa del proyecto)
+reembolso             = lo que pagó × (total − pagado a la empresa) / total
+ahorro estimado       = kWh × tarifa eléctrica   ← off-chain, la tarifa cambia
 ```
 
-**Ejemplo:** se juntan ₡10 000, se prometen 1 000 kWh y hay un 30% de adelanto.
+**Ejemplo (el del simulador):** Ana firma *Familiar* (500 kWh), Beto *Comercio* (1 000 kWh) y los Mora *Familiar* (500 kWh). La promesa es 2 000 kWh. Los paneles generan 1 600 kWh (80%):
 
-| Paneles generan | Instalador recibe | Vuelve a los vecinos |
+| | Recibe | De vuelta |
 |---|---|---|
-| 1 200 kWh (120%) | ₡10 000 (tope del 100%) | ₡0 |
-| 800 kWh (80%) | ₡3 000 adelanto + ₡5 000 = **₡8 000** | **₡2 000** |
-| 100 kWh (10%) | ₡3 000 (solo el adelanto) | ₡7 000 |
-| Nunca se instala | ₡0 | **₡10 000 (100%)** |
+| Empresa | 80% de lo firmado | — |
+| Doña Ana | 400 kWh | 20% de lo que pagó |
+| Beto | 800 kWh | 20% de lo que pagó |
+| Familia Mora | 400 kWh | 20% de lo que pagó |
 
-### Protecciones que tiene el contrato
+### Protecciones del contrato
 
-- 🔐 **Comité con mayoría (2 de 3):** el instalador no puede ponerse de acuerdo con un solo vecino para inflar los números.
-- 📈 **Lecturas absolutas del medidor:** se reporta lo que marca el medidor, que solo puede subir. Si se reporta dos veces el mismo mes o se escribe un número menor, el contrato lo rechaza (`MeterNotIncreasing`).
-- 🗳️ **Si las lecturas no coinciden, no cuentan:** si un miembro dice 300 y otro dice 250, no se aplica ninguna hasta que la mayoría firme el mismo valor.
-- 🙋 **Período de objeción (7 días):** antes de pagar, cualquier vecino que aportó puede objetar las lecturas (`dispute`). El proyecto se congela hasta que la mayoría del comité firme la lectura real (`resolve_dispute`). Así, aunque dos miembros del comité se pongan de acuerdo con el instalador, los vecinos pueden frenarlo.
-- ⏰ **Plazos:** si no se instala a tiempo, todos recuperan el 100%. La liquidación (`settle`) la puede llamar **cualquiera**, así nadie bloquea los fondos dejando de actuar.
-- 🧮 **Tope de adelanto del 50%** y **tope de pago del 100%** aunque los paneles generen de más.
-- 🚫 **Sin doble cobro:** el aporte se borra antes de transferir el reembolso.
+- 🔐 **Comité con mayoría (2 de 3):** ninguna persona sola confirma la instalación ni firma lecturas.
+- 📈 **Lecturas absolutas del medidor:** el medidor solo sube. Reportar dos veces el mismo mes o un número menor se rechaza (`MeterNotIncreasing`).
+- 🗳️ **Si las lecturas no coinciden, no cuentan** hasta que la mayoría firme el mismo valor.
+- 🙋 **7 días de objeción:** cualquier familia que firmó puede objetar (`dispute`). El proyecto se congela hasta que el comité firme la lectura real (`resolve_dispute`).
+- ⏰ **Plazos:** sin instalación a tiempo, 100% de vuelta. `settle` lo puede llamar **cualquiera**, así nadie bloquea la plata quedándose quieto.
+- 🧮 **Topes:** el adelanto es como máximo 50% y el pago como máximo 100%, aunque se genere de más.
+- 🚫 **Sin dobles:** una familia firma un solo plan por proyecto y no puede reclamar dos veces.
 
 ---
 
@@ -87,18 +89,18 @@ reembolso    = aporte del vecino × (total − pagado al instalador) / total
 
 | Función | Quién firma | Qué hace |
 |---|---|---|
-| `initialize(committee, threshold, token)` | Todo el comité | Configura las credenciales de los miembros (cuenta + rol), cuántas firmas se necesitan y el token (USDC o XLM). |
-| `create_project(installer, member, name, kwh_promised, advance_bps, install_days, measure_days)` | Instalador + un miembro | Crea el acuerdo. Devuelve el `id`. |
-| `contribute(neighbor, id, amount)` | Vecino | Aporta fondos, que quedan bloqueados en el contrato. |
-| `approve_installation(member, id, meter_start)` | Miembro del comité | Firma la instalación. Con la mayoría paga el adelanto y empieza a medir. |
-| `submit_reading(member, id, meter)` | Miembro del comité | Firma una lectura absoluta. Con la mayoría actualiza los kWh generados. |
-| `dispute(neighbor, id)` | Vecino que aportó | Durante los 7 días de objeción, congela el proyecto si cree que las lecturas están infladas. |
-| `resolve_dispute(member, id, meter)` | Miembro del comité | Firma la lectura real. Con la mayoría corrige los kWh y liquida en el acto. |
-| `rotate_member(member, old, new)` | Miembro del comité | Firma el cambio de llave de un miembro (ej. perdió el celular). Con la mayoría, la nueva llave hereda el rol. |
-| `revoke_member(member, target)` | Miembro del comité | Firma sacar a alguien del comité. No se permite si quedarían menos miembros que firmas necesarias. |
-| `settle(id)` | Cualquiera | Pasados la medición y los 7 días sin objeciones, paga al instalador lo que ganó. |
-| `claim_refund(neighbor, id)` | Vecino | Recupera su parte del sobrante (o el 100% si nunca se instaló). |
-| `get_project`, `get_contribution`, `get_config`, `is_member`, `project_count`, `performance_bps` | — | Consultas. |
+| `initialize(committee, threshold, token)` | Todo el comité | Configura las credenciales (cuenta + rol), cuántas firmas se necesitan y el token (USDC, XLM…). |
+| `create_project(installer, member, name, plans, advance_bps, install_days, measure_days)` | Empresa + un miembro | Publica de 1 a 5 planes `{name, panels, price, kwh}`. Devuelve el `id`. |
+| `subscribe(neighbor, id, plan)` | Familia | Firma un plan: paga su precio y la promesa del proyecto crece con sus kWh. |
+| `approve_installation(member, id, meter_start)` | Miembro del comité | Firma la instalación. Con mayoría paga el adelanto y empieza a medir. |
+| `submit_reading(member, id, meter)` | Miembro del comité | Firma una lectura absoluta. Con mayoría actualiza los kWh generados. |
+| `dispute(neighbor, id)` | Familia que firmó | En los 7 días de objeción, congela el proyecto. |
+| `resolve_dispute(member, id, meter)` | Miembro del comité | Firma la lectura real. Con mayoría corrige y liquida en el acto. |
+| `settle(id)` | Cualquiera | Sin objeciones, paga a la empresa lo que ganó. |
+| `claim_refund(neighbor, id)` | Familia | Recupera su parte de lo no entregado (o el 100% si nunca se instaló). |
+| `rotate_member(member, old, new)` | Miembro del comité | Cambio de llave (ej. celular perdido); la nueva hereda el rol. 2 de 3. |
+| `revoke_member(member, target)` | Miembro del comité | Saca a alguien del comité sin romper el umbral. 2 de 3. |
+| `get_project`, `get_plans`, `get_share`, `get_contribution`, `get_config`, `is_member`, `project_count`, `performance_bps` | — | Consultas. `get_share` dice cuántos kWh le tocan a cada familia. |
 
 ---
 
@@ -110,14 +112,13 @@ reembolso    = aporte del vecino × (total − pagado al instalador) / total
 
 | ⛓️ On-chain (en el contrato) | 📄 Off-chain (fuera de la cadena) |
 |---|---|
-| La cuenta G/C de cada miembro del comité | Su DID `did:pkh:stellar:testnet:G…`, que **se calcula** a partir de la cuenta |
-| El rol público ("Presidenta ADI") y la fecha desde la que está vigente (`since`) | Nombre completo, cédula y teléfono. **Nunca on-chain:** la cadena es pública y permanente (Ley 8968 de protección de datos) |
-| Rotar la llave de un miembro (`rotate_member`, 2 de 3) | El `stellar.toml` de la ADI (SEP-1), que dice qué cuentas son suyas |
-| Revocar a un miembro (`revoke_member`, 2 de 3) | Fotos de la instalación y del medidor |
-| Los aportes, las firmas, las lecturas y los pagos | El login (SEP-10/45), los QR para firmar (SEP-7) y el simulador |
-| Eventos de auditoría (`rotar`, `revocar`, `aporte`, `lectura`…) | |
+| La cuenta G/C de cada miembro del comité, su rol y desde cuándo está vigente | Su DID `did:pkh:stellar:testnet:G…`, que **se calcula** a partir de la cuenta |
+| Los planes (precio, paneles, kWh) y qué plan firmó cada familia | Nombres, cédulas y teléfonos. **Nunca on-chain:** la cadena es pública y permanente (Ley 8968 de protección de datos) |
+| Pagos, firmas del comité, lecturas, disputas y reembolsos | La tarifa eléctrica y el **ahorro estimado** en colones (cambian con el tiempo) |
+| Rotar y revocar miembros (2 de 3) | El `stellar.toml` de la ADI (SEP-1), fotos de la instalación y del medidor |
+| Eventos de auditoría (`firma`, `lectura`, `disputa`, `rotar`…) | El login (SEP-10/45), los QR para firmar (SEP-7) y la página web |
 
-**¿Por qué "estilo DID"?** Un DID separa **quién sos** (tu identidad y tu rol) de **con qué llave firmás**. Si Luis pierde el celular, los otros dos miembros firman `rotate_member` y su nueva llave hereda el rol "Fontanero ASADA". El comité nunca queda con una llave muerta.
+**¿Por qué "estilo DID"?** Un DID separa **quién sos** (identidad y rol) de **con qué llave firmás**. Si Luis pierde el celular, Marta y Sofía firman `rotate_member` y su llave nueva hereda el rol "Fontanero ASADA". El comité nunca queda con una llave muerta.
 
 ### Cuentas G y C
 
@@ -126,15 +127,15 @@ reembolso    = aporte del vecino × (total − pagado al instalador) / total
 | `G…` | Cuenta clásica de Stellar (llave pública ed25519). Es la de Freighter, Lobstr, etc. |
 | `C…` | Un contrato. También puede ser una *smart wallet*, por ejemplo con passkey (huella o Face ID). |
 
-El contrato usa el tipo `Address` y `require_auth()`, que **aceptan los dos tipos**. Un vecino puede firmar con su wallet normal (G) o con la huella del celular (C) sin cambiar ni una línea del contrato.
+El contrato usa `Address` y `require_auth()`, que **aceptan los dos tipos**. Una familia puede firmar con su wallet normal (G) o con la huella del celular (C) sin cambiar el contrato.
 
-### SEPs (Stellar Ecosystem Proposals) que usa o aplica
+### SEPs (Stellar Ecosystem Proposals)
 
 | SEP | Qué es | En Sol Comunitario |
 |---|---|---|
-| **SEP-41** | Interfaz estándar de tokens | ✅ Los pagos usan `token::Client`, así que funciona con USDC, XLM o cualquier token SEP-41. |
+| **SEP-41** | Interfaz estándar de tokens | ✅ Los pagos usan `token::Client`: funciona con USDC, XLM o cualquier token SEP-41. En testnet usa XLM. |
 | **SEP-46** | Metadatos del contrato | ✅ `contractmeta!`: nombre, versión, descripción y repo, grabados en el WASM. |
-| **SEP-48** | Especificación de la interfaz | ✅ La genera el SDK; sirve para `stellar contract bindings` y los exploradores. |
+| **SEP-48** | Especificación de la interfaz | ✅ La genera el SDK; la usan `stellar contract bindings` y los exploradores. |
 | SEP-1 | `stellar.toml` | La ADI publica sus cuentas en su dominio (off-chain). |
 | SEP-10 / SEP-45 | Login web con cuenta G / C | Para un frontend real (off-chain). |
 | SEP-7 | URI `web+stellar:` | QR en el salón comunal para firmar desde el celular. |
@@ -144,18 +145,33 @@ El contrato usa el tipo `Address` y `require_auth()`, que **aceptan los dos tipo
 
 | Trustless Work | Sol Comunitario |
 |---|---|
-| Service provider / receiver | Instalador |
+| Service provider / receiver | La empresa Sol Comunitario |
 | Approver + release signer | Comité 2 de 3 (`approve_installation`, `submit_reading`) |
 | Dispute resolver | Comité 2 de 3 (`resolve_dispute`) |
 | Milestones | Instalación → lecturas mensuales → liquidación |
 
 ---
 
-## 5. Cómo correrlo
+## 5. ¿Cómo sé que el contrato es real? (testnet)
+
+El contrato está desplegado en **Stellar testnet** con una demo cargada: comité de 3, los 3 planes, dos familias suscritas, instalación confirmada y la primera lectura (180 de 750 kWh).
+
+- 🔎 **Explorador:** [stellar.expert · contrato](https://stellar.expert/explorer/testnet/contract/CCYWNAGKTLO7Y5M57EYGUJK35AVWPCVBMSX4GAEOEFFO66QILGISZKNM). Ahí se ven todas las transacciones.
+- 🌞 **La página** tiene una sección *"El contrato real, en vivo"* que lee `get_project`, `get_config` y `get_plans` directo de la red.
+- 🖥️ **Desde la terminal:**
+
+```bash
+stellar contract invoke --id CCYWNAGKTLO7Y5M57EYGUJK35AVWPCVBMSX4GAEOEFFO66QILGISZKNM \
+  --source <cualquier-identidad> --network testnet --send=no -- get_project --id 0
+```
+
+---
+
+## 6. Cómo correrlo
 
 ### Requisitos
-- [Rust](https://rustup.rs/)
-- (Para desplegar) [Stellar CLI](https://developers.stellar.org/docs/tools/cli)
+- [Rust](https://rustup.rs/) y [Stellar CLI](https://developers.stellar.org/docs/tools/cli)
+- Node.js 20+ (solo para el script de demo)
 
 ### Pruebas
 
@@ -166,78 +182,71 @@ cargo test
 > 💡 **En Windows sin Visual Studio C++**, usá el toolchain GNU, que trae su propio linker:
 > `rustup toolchain install stable-x86_64-pc-windows-gnu` y luego `cargo +stable-x86_64-pc-windows-gnu test`
 
-### Compilar a WASM y desplegar en testnet
+### Desplegar tu propia copia en testnet
 
 ```bash
 rustup target add wasm32v1-none
 stellar contract build
 
-stellar keys generate --global comite1 --network testnet --fund
-stellar contract deploy \
-  --wasm target/wasm32v1-none/release/sol_comunitario.wasm \
-  --source comite1 --network testnet
+# identidades de demo (con XLM de testnet)
+for k in sc-deployer sc-marta sc-luis sc-sofia sc-ana sc-beto sc-solartico; do
+  stellar keys generate $k --network testnet --fund
+done
+
+stellar contract deploy --wasm target/wasm32v1-none/release/sol_comunitario.wasm \
+  --source sc-deployer --network testnet
 ```
 
-Luego se invoca, por ejemplo:
+### Cargar la demo
+
+`initialize` y `create_project` necesitan **varias firmas** (todo el comité, empresa + miembro), algo que el CLI no arma solo. El script [`scripts/demo-testnet.mjs`](scripts/demo-testnet.mjs) usa `@stellar/stellar-sdk` para juntar esas firmas (`authorizeEntry`) y deja la demo cargada:
 
 ```bash
-stellar contract invoke --id <CONTRACT_ID> --source comite1 --network testnet -- \
-  submit_reading --member <DIRECCION_COMITE1> --id 0 --meter 5250
+cd scripts && npm install
+node demo-testnet.mjs <CONTRACT_ID>        # paso opcional: <CONTRACT_ID> 2 para retomar
 ```
+
+Las llaves se leen del Stellar CLI local (`stellar keys show`) y **nunca** se guardan en el repo.
 
 ---
 
-## 6. Pruebas (26 en total, todas ✅)
+## 7. Pruebas (27 en total, todas ✅)
 
 Las pruebas están en [`contracts/sol-comunitario/src/test.rs`](contracts/sol-comunitario/src/test.rs) y se escribieron **antes** del código (TDD).
 
-| Prueba | Qué demuestra |
-|---|---|
-| `camino_feliz_80_por_ciento_de_la_energia` | El flujo completo: aportes, adelanto, 3 lecturas mensuales, liquidación y reembolsos (₡8 000 / ₡1 500 / ₡500). |
-| `una_sola_firma_no_libera_el_adelanto` | Una sola firma no mueve la plata; con 2 de 3 sí. |
-| `nadie_firma_dos_veces` | Un miembro no puede contar como dos firmas. |
-| `extranos_no_pueden_firmar` | Ni el instalador ni un vecino pueden firmar como comité. |
-| `lecturas_en_desacuerdo_no_cuentan_hasta_tener_mayoria` | Si las lecturas no coinciden, no se aplican. |
-| `el_medidor_nunca_retrocede` | No se puede repetir ni bajar una lectura. |
-| `sobre_generar_no_paga_mas_del_100` | El pago tiene un tope del 100% del fondo. |
-| `paneles_que_no_generan_instalador_solo_se_queda_el_adelanto` | Bajo rendimiento: el instalador se queda solo con el adelanto. |
-| `nunca_se_instala_vecinos_recuperan_todo` | Si vence el plazo, el reembolso es del 100%. |
-| `no_se_liquida_antes_de_tiempo_ni_se_mide_despues` | Las ventanas de tiempo se respetan. |
-| `no_doble_liquidacion_ni_doble_reembolso` | No se puede cobrar dos veces. |
-| `no_se_instala_sin_fondos_ni_se_aporta_despues_de_instalar` | Las transiciones de estado son válidas. |
-| `lecturas_solo_durante_la_medicion` | No hay lecturas antes de la instalación. |
-| `validaciones_de_creacion_y_montos` | Promesa en 0, adelanto mayor al 50%, plazos en 0, nombre largo y montos en 0 son rechazados. |
-| `comite_invalido_y_doble_inicializacion` | El umbral debe ser válido, sin miembros repetidos, y solo se inicializa una vez. |
-| `crear_proyecto_requiere_firma_de_instalador_y_miembro` | Se requieren las dos firmas. |
-| `redondeo_nunca_deja_al_contrato_en_negativo` | Con números "feos", el contrato nunca debe más de lo que tiene. |
-| `no_se_liquida_durante_la_objecion` | Durante los 7 días de objeción, `settle` se rechaza. |
-| `vecino_objeta_y_el_comite_corrige_la_lectura` | Una lectura inflada (1 000 kWh) se corrige a la real (600 kWh) y se paga solo el 60%. |
-| `solo_quien_aporto_puede_objetar` | Alguien que no aportó no puede congelar el proyecto. |
-| `objecion_solo_dentro_del_plazo` | No se puede objetar ni durante la medición ni después de los 7 días. |
-| `resolver_requiere_disputa_abierta_y_comite` | Solo el comité resuelve, solo con una disputa abierta y con lecturas válidas. |
-| `las_credenciales_guardan_rol_y_fecha` | Cada miembro queda con su cuenta, su rol y la fecha desde la que está vigente. |
-| `luis_pierde_el_celular_y_rota_su_llave` | Con 2 de 3, la llave nueva hereda el rol; la vieja ya no puede firmar y la nueva sí. |
-| `rotar_valida_miembros` | No se puede rotar a alguien que no es miembro, ni a una cuenta que ya está en el comité, ni firmar si no se es del comité. |
-| `revocar_miembro_con_mayoria_sin_romper_el_umbral` | Se revoca con mayoría, pero nunca se deja al comité con menos miembros que el umbral. |
+| Grupo | Pruebas | Qué demuestran |
+|---|---|---|
+| Camino feliz | `camino_feliz_80_por_ciento_de_la_energia` | Planes, firmas, adelanto, 3 lecturas, energía por familia (400/200 kWh), liquidación y reembolsos. |
+| Planes | `familias_firman_un_plan_y_la_promesa_crece` | La promesa crece con cada plan; no se firma dos veces ni un plan inexistente. |
+| Comité 2 de 3 | `una_sola_firma_no_libera_el_adelanto`, `nadie_firma_dos_veces`, `extranos_no_pueden_firmar`, `lecturas_en_desacuerdo_no_cuentan_hasta_tener_mayoria`, `el_medidor_nunca_retrocede` | Nadie decide solo; las lecturas solo suben y necesitan mayoría. |
+| Pago por resultado | `sobre_generar_no_paga_mas_del_100`, `paneles_que_no_generan_empresa_solo_se_queda_el_adelanto`, `nunca_se_instala_familias_recuperan_todo` | Tope del 100%, bajo rendimiento y reembolso total. |
+| Tiempos y estados | `no_se_liquida_antes_de_tiempo_ni_se_mide_despues`, `no_doble_liquidacion_ni_doble_reembolso`, `no_se_instala_sin_familias_ni_se_firma_despues_de_instalar`, `lecturas_solo_durante_la_medicion` | Cada función solo en su momento. |
+| Validaciones | `validaciones_de_creacion`, `comite_invalido_y_doble_inicializacion`, `crear_proyecto_requiere_firma_de_empresa_y_miembro`, `redondeo_nunca_deja_al_contrato_en_negativo` | Planes inválidos, adelanto > 50%, comité mal formado, firmas requeridas y redondeo seguro. |
+| Objeción | `no_se_liquida_durante_la_objecion`, `familia_objeta_y_el_comite_corrige_la_lectura`, `solo_quien_firmo_un_plan_puede_objetar`, `objecion_solo_dentro_del_plazo`, `resolver_requiere_disputa_abierta_y_comite` | Lectura inflada (1 000 kWh) corregida a la real (600) antes de pagar. |
+| Identidad | `las_credenciales_guardan_rol_y_fecha`, `luis_pierde_el_celular_y_rota_su_llave`, `rotar_valida_miembros`, `revocar_miembro_con_mayoria_sin_romper_el_umbral` | Credenciales con rol, rotación de llave y revocación por mayoría. |
 
 ```
-test result: ok. 26 passed; 0 failed
+test result: ok. 27 passed; 0 failed
 ```
 
 ---
 
-## 7. Simulador visual
+## 8. La página
 
-**https://relichtyy.github.io/sol-comunitario/** es una página que **replica las reglas del contrato** paso a paso: firmás el acuerdo, los vecinos aportan (con monedas que vuelan a la bóveda), el comité firma 2 de 3, se leen 3 meses del medidor, viene el período de objeción y al final la liquidación con los reembolsos. A la derecha se ve en vivo el estado del contrato y cada función que se llama, incluidos los errores (`Error::MeterNotIncreasing`, `Error::InObjectionPeriod`…).
+**https://relichtyy.github.io/sol-comunitario/** tiene dos partes:
 
-Tiene 4 escenarios: **rinde 80%**, **rinde 15%**, **lecturas infladas** (el comité hace trampa y Doña Ana objeta) y **nunca se instala**. Está hecha con componentes de [ui-sdk](https://ui-sdk.dev) (tabs, slider, switch, dialog y tooltip) y respeta `prefers-reduced-motion`.
+1. **Simulador guiado (6 pasos)** con las mismas reglas del contrato: la empresa publica planes con su ahorro estimado, las familias eligen y firman (las monedas vuelan a la bóveda), el comité firma 2 de 3, 3 meses de lecturas, objeción y liquidación con la energía, el ahorro y el reembolso de cada familia. Incluye 4 escenarios: rinde 80%, rinde 15%, lecturas infladas y nunca se instala.
+2. **El contrato real, en vivo:** lee el estado del contrato desplegado en testnet.
+
+Está hecha con componentes de [ui-sdk](https://ui-sdk.dev) (tabs, slider, switch, dialog y tooltip) y respeta `prefers-reduced-motion`.
 
 ---
 
-## 8. Qué sigue (ideas para una versión real)
+## 9. Qué sigue
 
-- Conectar el medidor directamente con un **oráculo** (medidor IoT) para que firme las lecturas.
-- Usar **Trustless Work** para manejar el escrow con hitos estándar.
+- Que el **medidor firme sus propias lecturas** (SEP-53) y el comité solo co-firme.
+- Pagos en **USDC** o una stablecoin en colones en vez de XLM.
+- Conectar la página a **Freighter** para que las familias firmen desde el navegador.
 - Un fondo de mantenimiento opcional para limpiar los paneles.
 
 ---
